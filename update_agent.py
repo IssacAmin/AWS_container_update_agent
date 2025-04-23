@@ -75,8 +75,36 @@ def handle_update(payload):
 
         manifest_dir = os.path.join(SCRIPT_DIR, "manifests")
         manifest_path = os.path.join(manifest_dir, f"{container_id}.json")
-        os.makedirs(manifest_dir, exist_ok=True)
 
+        json_dir = os.path.join(SCRIPT_DIR, "json")
+        json_path = os.path.join(manifest_dir, "installed_features.json")
+        os.makedirs(manifest_dir, exist_ok=True)
+        features_data = { "features": [] }
+
+        if os.path.exists(json_path):
+            with open(json_path, "r") as f:
+                try:
+                    features_data = json.load(f)
+                except json.JSONDecodeError:
+                    print("Warning: Failed to decode JSON, starting fresh.")
+
+        # Check if the feature already exists
+        for feature in features_data["features"]:
+            if feature["name"] == container_id:
+                print(f"Feature '{container_id}' already exists. Skipping.")
+                return
+
+        # Add new feature
+        features_data["features"].append({
+            "name": container_id,
+            "installed": True
+        })
+
+        # Save updated file
+        with open(json_path, "w") as f:
+            json.dump(features_data, f, indent=2)
+
+        print(f"Added feature '{container_id}' to installed_features.json.")
 
         try:
             with open(manifest_path, "w") as f:
@@ -84,7 +112,9 @@ def handle_update(payload):
         except Exception as e:
             publish_status("error", f"Failed to write manifest: {e}")
             return
-        publish_status("done","Manifest updated successfully Version 1.1")
+        
+
+        publish_status("done","Manifest updated successfully Version 1.0")
     
 
 
@@ -131,4 +161,5 @@ client.on_disconnect = on_disconnect
 
 client.connect(AWS_IOT_ENDPOINT, MQTT_PORT)
 client.loop_forever()
+
 
