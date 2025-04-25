@@ -13,10 +13,14 @@ WORKDIR /app
 COPY . .
 
 # Install Python dependencies directly
-RUN pip install --no-cache-dir requests paho-mqtt
+RUN pip install --no-cache-dir requests paho-mqtt udsoncan \
+    can \
+    git+https://github.com/pylessard/python-can-isotp.git
 
 # Make the update script executable
 RUN chmod +x update_agent.py
+RUN chmod +x flashing_script.py
+RUN chmod +x uds_client.py
 
 # Run the script
 CMD ["python", "update_agent.py"]
