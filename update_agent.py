@@ -122,6 +122,32 @@ def handle_update(payload):
                 return
             
             publish_status("done", "Manifest updated successfully Version 1.0")
+    elif update_target == "ECU":
+        ecu_data = payload.get("HMI_meta_data", {})
+        segmented = bool(ecu_data.get("segmented"))
+        ecu_compressed_payload = ecu_data.get("ecu_payload")
+        if segmented is True:
+            total_segments = int(ecu_data.get("total_segments"))
+            segment_id = int(ecu_data.get("segment_id"))
+            assemble_payload(ecu_compressed_payload,total_segments, segment_id)
+            publish_status("done", "ECU update segment recieved")
+        elif segmented is False:
+            update = decompress_payload(ecu_compressed_payload)
+            update_ecu(update)
+            publish_status("done", "ECU update relayed to UDS")
+        return
+
+def update_ecu(update):
+    #TODO
+    return
+
+def assemble_payload(compressed_payload, total_segments, segment_id):
+    #TODO
+    return
+
+def decompress_payload(payload):
+    #TODO
+    return
 
 
 def handle_marketplace_payload(payload):
