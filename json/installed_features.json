@@ -1,0 +1,11 @@
+{
+  "features": [
+    { "name": "Lane Keep Assist", "installed": true },
+    { "name": "Automatic Parking Assist", "installed": true },
+    { "name": "Over-the-Air Diagnostics", "installed": true },
+    { "name": "Real-Time Traffic Updates", "installed": true },
+    { "name": "Smart Climate Control", "installed": true },
+    { "name": "Emergency Call System", "installed": true }
+  ]
+}
+

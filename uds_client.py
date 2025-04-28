@@ -36,13 +36,13 @@ class UDSClient:
         key = seed
         return key
 
-    def send_request(self, service, data, timeout=1.0):
+    def send_request(self, service, subfunction = None, data = None, timeout=1.0):
         isotp_address = isotp.Address(isotp.AddressingMode.Normal_11bits, rxid=self.ecu_address, txid=self.hmi_address)
         isotp_layer = isotp.TransportLayer(rxfn=self.bus.recv, txfn=self.bus.send, address=isotp_address)
         conn = PythonIsoTpConnection(isotp_layer)
         try:
             with Client(conn, config=self.client_config) as client:
-                request = udsoncan.Request(service, data=data)
+                request = udsoncan.Request(service, subfunction = subfunction , data=data)
                 client.conn.send(request)
                 logger.info(f"Sent UDS request: {request}")
 
@@ -76,7 +76,7 @@ class UDSClient:
 
     def session_control(self, session_type, timeout=1.0):
         try:
-            return self.send_request(services.DiagnosticSessionControl, session_type.to_bytes(1, 'big'), timeout=timeout)
+            return self.send_request(services.DiagnosticSessionControl, subfunction = session_type, timeout=timeout)
         except Exception as e:
             logger.error(f"Error in session_control: {e}")
             raise
@@ -141,7 +141,7 @@ class UDSClient:
     def request_download(self, data_format_identifier, memory_address, memory_size, timeout=1.0):
         try:
             request_data = data_format_identifier.to_bytes(1, 'big') + memory_address.to_bytes(4, 'big') + memory_size.to_bytes(4, 'big')
-            return self.send_request(services.RequestDownload, request_data, timeout=timeout)
+            return self.send_request(services.RequestDownload, data = request_data, timeout=timeout)
         except Exception as e:
             logger.error(f"Error in request_download: {e}")
             raise
@@ -163,7 +163,7 @@ class UDSClient:
 
     def ecu_reset(self, reset_type, timeout=1.0):
         try:
-            return self.send_request(services.ECUReset, reset_type.to_bytes(1, 'big'), timeout=timeout)
+            return self.send_request(services.ECUReset, subfunction = reset_type, timeout=timeout)
         except Exception as e:
             logger.error(f"Error in ecu_reset: {e}")
             raise

@@ -1,14 +1,24 @@
 import ssl
 import json
 import subprocess
-import requests
 import os
-import paho.mqtt.client as mqtt
+import paho.mqtt.client as mqtt # type: ignore
 import threading
 import time
+import base64
+import zlib
+from flashing_script import  send_update
+import hashlib
 
-
-# === CONFIGURATION ===
+# === GLOBAL VARIABLES === #
+ecu_update_id = ""
+ecu_curr_update_id = ""
+curr_segment_no = -1
+prev_segment_no = -1
+first_segment = True
+total_segments = -1
+full_payload = ""
+# === CONFIGURATION === #
 
 DEVICE_ID = "jetson-nano-devkit"
 AWS_IOT_ENDPOINT = "a2cv4n8w6s0bt0-ats.iot.eu-north-1.amazonaws.com"
@@ -20,17 +30,19 @@ CERT_FILE = os.path.join(SCRIPT_DIR, "certs", "device.crt")
 KEY_FILE = os.path.join(SCRIPT_DIR, "certs", "device.key")
 CA_CERT = os.path.join(SCRIPT_DIR, "certs", "AmazonRootCA1.pem")
 
+# === MQTT TOPICS === #
 UPDATE_TOPIC = f"update/{DEVICE_ID}"
-MARKETPLACE_PUBLISH_TOPIC = f"marketplace_request/{DEVICE_ID}"
+MARKETPLACE_PUBLISH_TOPIC = f"marketplace_requests/{DEVICE_ID}"
 MARKETPLACE_SUBSCRIBE_TOPIC = f"marketplace/{DEVICE_ID}"
 REQUESTS_TOPIC = f"requests/{DEVICE_ID}"
 STATUS_TOPIC = f"status/{DEVICE_ID}"
 
 FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "requests.json")
+MARKETPLACE_FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "marketplace_requests.json")
 POLL_INTERVAL = 1  # seconds
 
 
-# === MQTT SETUP ===
+# === MQTT SETUP === #
 
 client = mqtt.Client(client_id=DEVICE_ID)
 
@@ -44,7 +56,7 @@ client.tls_set(
 client.tls_insecure_set(False)
 
 
-# === FUNCTIONALITY ===
+# === FUNCTIONALITY === #
 
 def run_command(cmd):
     print(f"Running: {cmd}")
@@ -65,6 +77,13 @@ def publish_status(status, message):
 
 
 def handle_update(payload):
+    global ecu_update_id
+    global ecu_curr_update_id 
+    global curr_segment_no 
+    global prev_segment_no 
+    global first_segment 
+    global total_segments 
+    global segments 
     update_target = payload.get("update_target")
 
     if not update_target:
@@ -76,7 +95,8 @@ def handle_update(payload):
         hmi_data = payload.get("HMI_meta_data", {})
         action = hmi_data.get("action")
         manifest = hmi_data.get("manifest")
-
+        feature_name = hmi_data.get("feature_name")
+        print("1")
         if not action or not manifest:
             print("error action or manifest wrong")
             publish_status("error", "Missing 'action' or 'manifest' in HMI_meta_data")
@@ -103,16 +123,16 @@ def handle_update(payload):
                     print("Warning: Failed to decode JSON, starting fresh.")
 
         # Add new feature if not already installed
-        feature_exists = any(feature["name"] == container_id for feature in features_data["features"])
+        feature_exists = any(feature["name"] == feature_name for feature in features_data["features"])
         if not feature_exists:
             features_data["features"].append({
-                "name": container_id,
+                "name": feature_name,
                 "installed": True
             })
             with open(json_path, "w") as f:
                 json.dump(features_data, f, indent=2)
 
-            print(f"Added feature '{container_id}' to installed_features.json.")
+            print(f"Added feature '{feature_name}' to installed_features.json.")
 
             try:
                 with open(manifest_path, "w") as f:
@@ -123,30 +143,87 @@ def handle_update(payload):
             
             publish_status("done", "Manifest updated successfully Version 1.0")
     elif update_target == "ECU":
-        ecu_data = payload.get("HMI_meta_data", {})
+        ecu_data = payload.get("ECU_meta_data", {})
         segmented = bool(ecu_data.get("segmented"))
-        ecu_compressed_payload = ecu_data.get("ecu_payload")
+        if ecu_update_id == "":
+            ecu_update_id = ecu_data.get("id")
+            ecu_curr_update_id = ecu_data.get("id")
+        else:
+            ecu_curr_update_id = ecu_data.get("id")
+        
+        ecu_compressed_payload = payload.get("data")
         if segmented is True:
-            total_segments = int(ecu_data.get("total_segments"))
-            segment_id = int(ecu_data.get("segment_id"))
-            assemble_payload(ecu_compressed_payload,total_segments, segment_id)
+            total_segments = int(ecu_data.get("number_of_segments"))
+            if curr_segment_no == -1:
+                curr_segment_no = int(ecu_data.get("segment_no"))
+            else:
+                prev_segment_no = curr_segment_no
+                curr_segment_no = int(ecu_data.get("segment_no"))
+            assemble_payload(ecu_compressed_payload)
+            update_ecu()
             publish_status("done", "ECU update segment recieved")
         elif segmented is False:
-            update = decompress_payload(ecu_compressed_payload)
-            update_ecu(update)
+            prepare_payload(ecu_compressed_payload)
+            update_ecu()
             publish_status("done", "ECU update relayed to UDS")
         return
 
-def update_ecu(update):
-    #TODO
+def update_ecu():
+    #Todo: call flashscript entry point
+    with open("output.hex","rb") as f:
+        delta_bytes = f.read()
+    #send_update(0,delta_bytes)
     return
 
-def assemble_payload(compressed_payload, total_segments, segment_id):
-    #TODO
-    return
+def assemble_payload(compressed_payload):
+    global ecu_update_id
+    global ecu_curr_update_id 
+    global curr_segment_no 
+    global prev_segment_no 
+    global first_segment 
+    global total_segments 
+    global full_payload
 
-def decompress_payload(payload):
-    #TODO
+    if ecu_update_id == ecu_curr_update_id:
+        if not first_segment:
+            if curr_segment_no != prev_segment_no + 1:
+                publish_status("error", "segment number is not matching previous one")
+                return
+            
+        full_payload += compressed_payload
+        prev_segment_no = curr_segment_no
+        first_segment = False
+
+        if(curr_segment_no == total_segments - 1):
+            print("extracted payload:  " + full_payload)
+            compressed_bytes = base64.b64decode(full_payload)
+            print("compressed bytes:  " + str(compressed_bytes))
+            decompressed_bytes = zlib.decompress(compressed_bytes)
+            print("decompressed bytes:  " + str(decompressed_bytes))
+            with open("output.hex","wb") as f:
+                f.write(decompressed_bytes)
+            first_segment = True
+            ecu_update_id = ""
+            ecu_curr_update_id = ""
+            curr_segment_no  = -1
+            prev_segment_no  = -1
+            total_segments  = 0
+            full_payload = ""
+            
+        publish_status("done", "assembled segmented payload successfully")
+    else:
+        publish_status("error", "segment id is not matching previous one")
+        return
+
+def prepare_payload(payload):
+    print("extracted payload:  " + payload)
+    compressed_bytes = base64.b64decode(payload)
+    print("compressed bytes:  " + str(compressed_bytes))
+    decompressed_bytes = zlib.decompress(compressed_bytes)
+    print("decompressed bytes:  " + str(decompressed_bytes))
+    with open("output.hex","wb") as f:
+        f.write(decompressed_bytes)
+    publish_status("done", "recieved payload successfully")
     return
 
 
@@ -156,7 +233,6 @@ def handle_marketplace_payload(payload):
         marketplace_dir = os.path.join(SCRIPT_DIR, "json")
         marketplace_path = os.path.join(marketplace_dir, "marketplace.json")
         os.makedirs(marketplace_dir, exist_ok=True)
-
         try:
             with open(marketplace_path, "w") as f:
                 json.dump(payload, f, indent=2)
@@ -166,17 +242,47 @@ def handle_marketplace_payload(payload):
         publish_status("done", "Marketplace successfully fetched")
 
 
-def watch_file_and_publish():
+
+
+def hash_file_content(filepath):
+    with open(filepath, 'rb') as f:
+        return hashlib.md5(f.read()).hexdigest()
+
+def watch_marketplace_file_and_publish():
+    print(f"Watching file: {MARKETPLACE_FILE_TO_WATCH}")
+    last_hash = hash_file_content(MARKETPLACE_FILE_TO_WATCH)
+
+    while True:
+        try:
+            if os.path.exists(MARKETPLACE_FILE_TO_WATCH):
+                current_hash = hash_file_content(MARKETPLACE_FILE_TO_WATCH)
+                if current_hash != last_hash:
+                    last_hash = current_hash
+                    msg = {
+                        "message": "Requesting Marketplace items"
+                    }
+                    client.publish(MARKETPLACE_PUBLISH_TOPIC, json.dumps(msg))
+
+
+                    # Reset hash to avoid re-publish due to our own write
+                    last_hash = hash_file_content(MARKETPLACE_FILE_TO_WATCH)
+
+        except Exception as e:
+            print(f"Error watching file: {e}")
+            publish_status("error", f"File watch error: {e}")
+        time.sleep(POLL_INTERVAL)
+
+def watch_request_file_and_publish():
     print(f"Watching file: {FILE_TO_WATCH}")
-    last_mtime = None
+    last_hash = hash_file_content(FILE_TO_WATCH)
 
     while True:
         try:
             if os.path.exists(FILE_TO_WATCH):
-                mtime = os.path.getmtime(FILE_TO_WATCH)
-                if last_mtime is None or mtime != last_mtime:
-                    last_mtime = mtime
-
+                current_hash = hash_file_content(FILE_TO_WATCH)
+                if current_hash != last_hash:
+                    last_hash = current_hash
+                    print("ana f el request hena ahoo")
                     with open(FILE_TO_WATCH, "r") as f:
                         features = json.load(f)
 
@@ -188,6 +294,9 @@ def watch_file_and_publish():
                         # Clear list after publishing
                         with open(FILE_TO_WATCH, "w") as f:
                             json.dump([], f, indent=2)
+                        
+                        #Reset hash to avoid re-publish due to our own write
+                        last_hash = hash_file_content(FILE_TO_WATCH)
 
         except Exception as e:
             print(f"Error watching file: {e}")
@@ -200,7 +309,7 @@ def watch_file_and_publish():
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to AWS IoT Core.")
-        client.subscribe([UPDATE_TOPIC, MARKETPLACE_SUBSCRIBE_TOPIC])
+        client.subscribe([(UPDATE_TOPIC, 1), (MARKETPLACE_SUBSCRIBE_TOPIC, 1)])
         print(f"Subscribed to topics: {UPDATE_TOPIC}, {MARKETPLACE_SUBSCRIBE_TOPIC}")
     else:
         print(f"Connection failed with code {rc}")
@@ -211,13 +320,16 @@ def on_message(client, userdata, msg):
     try:
         payload = json.loads(msg.payload.decode())
         print(f"Payload: {payload}")
+
         if msg.topic == UPDATE_TOPIC:
             handle_update(payload)
         elif msg.topic == MARKETPLACE_SUBSCRIBE_TOPIC:
             handle_marketplace_payload(payload)
+
     except Exception as e:
         print(f"Failed to handle message: {e}")
         publish_status("error", str(e))
+
 
 
 def on_disconnect(client, userdata, rc):
@@ -236,7 +348,8 @@ client.connect(AWS_IOT_ENDPOINT, MQTT_PORT)
 client.loop_start()  # Use non-blocking loop
 
 # Start file watch in background thread
-threading.Thread(target=watch_file_and_publish, daemon=True).start()
+threading.Thread(target=watch_request_file_and_publish, daemon=True).start()
+threading.Thread(target=watch_marketplace_file_and_publish, daemon=True).start()
 
 # Keep main thread alive
 try:

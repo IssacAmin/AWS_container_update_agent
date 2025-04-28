@@ -1,0 +1,20 @@
+{
+  "marketplace": [
+    { "name": "Adaptive Cruise Control", "price": "$499"},
+    { "name": "Lane Keep Assist", "price": "$299" },
+    { "name": "360° Camera View", "price": "$399"},
+    { "name": "Remote Start via App", "price": "$199" },
+    { "name": "Automatic Parking Assist", "price": "$349" },
+    { "name": "Navigation System Upgrade", "price": "$129" },
+    { "name": "Voice Assistant Premium", "price": "$99"},
+    { "name": "Over-the-Air Diagnostics", "price": "$79"},
+    { "name": "Highway Pilot Mode", "price": "$599"},
+    { "name": "In-Car Wi-Fi Hotspot", "price": "$20/month"},
+    { "name": "Real-Time Traffic Updates", "price": "$59/year" },
+    { "name": "EV Range Optimizer", "price": "$89" },
+    { "name": "Teen Driver Mode", "price": "$49"},
+    { "name": "Smart Climate Control", "price": "$119"},
+    { "name": "Emergency Call System", "price": "$0" }
+  ]
+}
+
