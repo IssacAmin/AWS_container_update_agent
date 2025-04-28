@@ -172,7 +172,7 @@ def update_ecu():
     #Todo: call flashscript entry point
     with open("output.hex","rb") as f:
         delta_bytes = f.read()
-    #send_update(0,delta_bytes)
+    send_update(0,delta_bytes)
     return
 
 def assemble_payload(compressed_payload):
