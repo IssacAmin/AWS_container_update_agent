@@ -80,6 +80,7 @@ def send_update(target: int, update: bytes):
         # logger.info(f"Update sent to target {target}")
     except Exception as e:
         # logger.error(f"An error occurred during the update process: {e}")
+        return
     finally:
         # logger.info("Shutting down client")
         client.shutdown()

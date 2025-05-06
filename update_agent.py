@@ -353,7 +353,7 @@ threading.Thread(target=watch_marketplace_file_and_publish, daemon=True).start()
 
 # Keep main thread alive
 try:
-    update_ecu()
+    update_ecu(0)
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
