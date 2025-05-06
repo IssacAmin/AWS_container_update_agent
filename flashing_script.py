@@ -1,22 +1,12 @@
-from uds_client import UDSClient
-import json
+from uds_client import UDSClient, publish_status
+
 # import logging
 
 # Configure logging
 # logging.basicConfig(level=logging.INFO)
 # logger = logging.getLogger(__name__)
 
-import paho.mqtt.client as mqtt
 
-
-STATUS_TOPIC = "status/jetson-nano-devkit"
-
-def publish_status(client, status, message):
-    payload = {
-        "status": status,
-        "message": message
-    }
-    client.publish(STATUS_TOPIC, json.dumps(payload))
 
 def send_update(MQTTClient, target: int, update: bytes):
     if not isinstance(update, bytes):
@@ -41,7 +31,7 @@ def send_update(MQTTClient, target: int, update: bytes):
         
 
     publish_status(MQTTClient, "done", "Trying to get CAN Client")
-    client = UDSClient('can0', 500000, 0x123, 0x456)
+    client = UDSClient(MQTTClient, 'can0', 500000, 0x123, 0x456)
     publish_status(MQTTClient, "done", "Can Client Created Successfully")
     try:
         # logger.info("Starting programming session")

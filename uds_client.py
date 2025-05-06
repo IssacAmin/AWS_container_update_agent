@@ -8,6 +8,18 @@ import can
 import logging
 from udsoncan import services
 
+import paho.mqtt.client as mqtt
+import json
+
+STATUS_TOPIC = "status/jetson-nano-devkit"
+
+def publish_status(client, status, message):
+    payload = {
+        "status": status,
+        "message": message
+    }
+    client.publish(STATUS_TOPIC, json.dumps(payload))
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -18,8 +30,9 @@ def getKey(seed):
     return seed
 
 class UDSClient:
-    def __init__(self, can_interface, can_bitrate, ecu_address, hmi_address, default_retries=5):
+    def __init__(self, MQTTClient, can_interface, can_bitrate, ecu_address, hmi_address, default_retries=5):
         self.can_interface = can_interface
+        self.MQTTClient = MQTTClient
         self.can_bitrate = can_bitrate
         self.ecu_address = ecu_address
         self.hmi_address = hmi_address
@@ -27,9 +40,9 @@ class UDSClient:
         self.client_config = default_client_config.copy()
         self.client_config['security_algo'] = self.custom_security_algo
         try:
-            self.bus = can.interface.Bus(interface='socketcan', channel=self.can_interface, bitrate=self.can_bitrate)
+            self.bus = can.interface.Bus(interface="socketcan", channel=self.can_interface, bitrate=self.can_bitrate)
         except Exception as e:
-            logger.error(f"Failed to initialize CAN bus: {e}")
+            publish_status(MQTTClient, "done", "Failed to acquire CAN bus")
             raise
 
     def custom_security_algo(self, level, seed):
