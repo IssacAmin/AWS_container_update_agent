@@ -96,7 +96,6 @@ def handle_update(payload):
         action = hmi_data.get("action")
         manifest = hmi_data.get("manifest")
         feature_name = hmi_data.get("feature_name")
-        print("1")
         if not action or not manifest:
             print("error action or manifest wrong")
             publish_status("error", "Missing 'action' or 'manifest' in HMI_meta_data")
@@ -145,6 +144,7 @@ def handle_update(payload):
     elif update_target == "ECU":
         ecu_data = payload.get("ECU_meta_data", {})
         segmented = bool(ecu_data.get("segmented"))
+        target_ecu = int(ecu_data.get("target_ecu"))
         if ecu_update_id == "":
             ecu_update_id = ecu_data.get("id")
             ecu_curr_update_id = ecu_data.get("id")
@@ -160,19 +160,19 @@ def handle_update(payload):
                 prev_segment_no = curr_segment_no
                 curr_segment_no = int(ecu_data.get("segment_no"))
             assemble_payload(ecu_compressed_payload)
-            update_ecu()
+            update_ecu(target_ecu)
             publish_status("done", "ECU update segment recieved")
         elif segmented is False:
             prepare_payload(ecu_compressed_payload)
-            update_ecu()
+            update_ecu(target_ecu)
             publish_status("done", "ECU update relayed to UDS")
         return
 
-def update_ecu():
+def update_ecu(target_ecu):
     #Todo: call flashscript entry point
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
-    send_update(0,delta_bytes)
+    send_update(target_ecu,delta_bytes)
     return
 
 def assemble_payload(compressed_payload):
@@ -353,6 +353,7 @@ threading.Thread(target=watch_marketplace_file_and_publish, daemon=True).start()
 
 # Keep main thread alive
 try:
+    update_ecu()
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
