@@ -1,16 +1,16 @@
 from uds_client import UDSClient, publish_status
 
-# import logging
+import logging
 
-# Configure logging
-# logging.basicConfig(level=logging.INFO)
-# logger = logging.getLogger(__name__)
+#Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 
 def send_update(MQTTClient, target: int, update: bytes):
     if not isinstance(update, bytes):
-        # logger.error("Update data must be of type bytes")
+        logger.error("Update data must be of type bytes")
         return
     
     # convert update bytes into a list of bytes objects for each xdelta instruction
@@ -30,11 +30,11 @@ def send_update(MQTTClient, target: int, update: bytes):
         # elif update[i] = 0x10:
         
 
-    publish_status(MQTTClient, "done", "Trying to get CAN Client")
+    logger.info("trying to get can client")
     client = UDSClient(MQTTClient, 'can0', 500000, 0x123, 0x456)
-    publish_status(MQTTClient, "done", "Can Client Created Successfully")
+    logger.info("Can client created successfully")
     try:
-        # logger.info("Starting programming session")
+        logger.info("Starting programming session")
         response = client.session_control(0x01)  # Start programming session
         if not response['positive']:
             raise Exception(f"Failed to start programming session: {response['code_name']}")

@@ -1,13 +1,12 @@
 import udsoncan
 import udsoncan.Request
 import isotp
-from udsoncan.connections import PythonIsoTpConnection
+from udsoncan.connections import PythonIsoTpConnection, IsoTPSocketConnection
 from udsoncan.client import Client
 from udsoncan.configs import default_client_config
 import can
 import logging
 from udsoncan import services
-
 import paho.mqtt.client as mqtt
 import json
 
@@ -40,9 +39,9 @@ class UDSClient:
         self.client_config = default_client_config.copy()
         self.client_config['security_algo'] = self.custom_security_algo
         try:
-            self.bus = can.interface.Bus(interface="socketcan", channel=self.can_interface, bitrate=self.can_bitrate)
+            self.bus = can.Bus(interface="socketcan", channel=self.can_interface, bitrate=self.can_bitrate)
         except Exception as e:
-            publish_status(MQTTClient, "done", "Failed to acquire CAN bus")
+            logger.info("Failed to acquire CAN bus")
             raise
 
     def custom_security_algo(self, level, seed):
@@ -52,11 +51,11 @@ class UDSClient:
     def send_request(self, service, subfunction = None, data = None, timeout=1.0):
         isotp_address = isotp.Address(isotp.AddressingMode.Normal_11bits, rxid=self.ecu_address, txid=self.hmi_address)
         isotp_layer = isotp.TransportLayer(rxfn=self.bus.recv, txfn=self.bus.send, address=isotp_address)
-        conn = PythonIsoTpConnection(isotp_layer)
+        conn = IsoTPSocketConnection(interface=self.can_interface, address=isotp_address)
         try:
             with Client(conn, config=self.client_config) as client:
                 request = udsoncan.Request(service, subfunction = subfunction , data=data)
-                client.conn.send(request)
+                client.conn.send(request.get_payload())
                 logger.info(f"Sent UDS request: {request}")
 
                 received_message = self.bus.recv(timeout=timeout)
@@ -89,7 +88,13 @@ class UDSClient:
 
     def session_control(self, session_type, timeout=1.0):
         try:
-            return self.send_request(services.DiagnosticSessionControl, subfunction = session_type, timeout=timeout)
+            # return self.send_request(services.DiagnosticSessionControl, subfunction = session_type, timeout=timeout)
+        # isotp_layer = isotp.TransportLayer(rxfn=self.bus.recv, txfn=self.bus.send, address=isotp_address)
+            isotp_address = isotp.Address(isotp.AddressingMode.Normal_11bits, rxid=self.ecu_address, txid=self.hmi_address)
+            conn = IsoTPSocketConnection(interface=self.can_interface, address=isotp_address)
+            with Client(conn, config=self.client_config) as client:
+                ret = client.change_session(session_type)
+                logger.info(f"return message to changing sessions: {ret}")
         except Exception as e:
             logger.error(f"Error in session_control: {e}")
             raise
