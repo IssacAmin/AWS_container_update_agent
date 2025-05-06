@@ -1,4 +1,5 @@
 from uds_client import UDSClient
+import json
 # import logging
 
 # Configure logging
@@ -6,6 +7,9 @@ from uds_client import UDSClient
 # logger = logging.getLogger(__name__)
 
 import paho.mqtt.client as mqtt
+
+
+STATUS_TOPIC = "status/jetson-nano-devkit"
 
 def publish_status(client, status, message):
     payload = {
