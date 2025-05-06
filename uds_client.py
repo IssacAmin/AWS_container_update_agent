@@ -43,30 +43,35 @@ class UDSClient:
         except Exception as e:
             logger.info("Failed to acquire CAN bus")
             raise
+        self.isotp_address = isotp.Address(isotp.AddressingMode.Normal_11bits, rxid=self.ecu_address, txid=self.hmi_address)
+        # Refer to isotp documentation for full details about parameters
+        self.isotp_params = {
+        'stmin': 32,                            # Will request the sender to wait 32ms between consecutive frame. 0-127ms or 100-900ns with values from 0xF1-0xF9
+        'blocksize': 8,                         # Request the sender to send 8 consecutives frames before sending a new flow control message
+        'wftmax': 0,                            # Number of wait frame allowed before triggering an error
+        'tx_data_length': 8,                    # Link layer (CAN layer) works with 8 byte payload (CAN 2.0)
+        # Minimum length of CAN messages. When different from None, messages are padded to meet this length. Works with CAN 2.0 and CAN FD.
+        'tx_data_min_length': None,
+        'tx_padding': 0,                        # Will pad all transmitted CAN messages with byte 0x00.
+        'rx_flowcontrol_timeout': 1000,         # Triggers a timeout if a flow control is awaited for more than 1000 milliseconds
+        'rx_consecutive_frame_timeout': 1000,   # Triggers a timeout if a consecutive frame is awaited for more than 1000 milliseconds
+        'override_receiver_stmin': None,        # When sending, respect the stmin requirement of the receiver. Could be set to a float value in seconds.
+        'max_frame_size': 4095,                 # Limit the size of receive frame.
+        'can_fd': False,                        # Does not set the can_fd flag on the output CAN messages
+        'bitrate_switch': False,                # Does not set the bitrate_switch flag on the output CAN messages
+        'rate_limit_enable': False,             # Disable the rate limiter
+        'rate_limit_max_bitrate': 1000000,      # Ignored when rate_limit_enable=False. Sets the max bitrate when rate_limit_enable=True
+        'rate_limit_window_size': 0.2,          # Ignored when rate_limit_enable=False. Sets the averaging window size for bitrate calculation when rate_limit_enable=True
+        'listen_mode': False,                   # Does not use the listen_mode which prevent transmission.
+        }
+
+        self.stack = isotp.CanStack(bus=self.bus, notifier=notifier, address=isotp_address, params=isotp_params)
+        self.conn = PythonIsoTpConnection(stack)
 
     def custom_security_algo(self, level, seed):
         key = seed
         return key
 
-    def send_request(self, service, subfunction = None, data = None, timeout=1.0):
-        isotp_address = isotp.Address(isotp.AddressingMode.Normal_11bits, rxid=self.ecu_address, txid=self.hmi_address)
-        isotp_layer = isotp.TransportLayer(rxfn=self.bus.recv, txfn=self.bus.send, address=isotp_address)
-        conn = IsoTPSocketConnection(interface=self.can_interface, address=isotp_address)
-        try:
-            with Client(conn, config=self.client_config) as client:
-                request = udsoncan.Request(service, subfunction = subfunction , data=data)
-                client.conn.send(request.get_payload())
-                logger.info(f"Sent UDS request: {request}")
-
-                received_message = self.bus.recv(timeout=timeout)
-                if received_message is None:
-                    raise Exception(f'No CAN frame received from ECU 0x{self.ecu_address:x} within {timeout} seconds')
-                response = client.can_to_uds(received_message.data, received_message.is_extended_id)
-                logger.info(f"Received CAN message: {received_message}")
-                return self.handle_response(response)
-        except Exception as e:
-            logger.error(f"Error sending request:  {e}")
-            raise
 
     def handle_response(self, response):
         try:
@@ -88,35 +93,9 @@ class UDSClient:
 
     def session_control(self, session_type, timeout=1.0):
         try:
-            isotp_address = isotp.Address(isotp.AddressingMode.Normal_11bits, rxid=self.ecu_address, txid=self.hmi_address)
-            conn = IsoTPSocketConnection(interface=self.can_interface, address=isotp_address)
-            # Refer to isotp documentation for full details about parameters
-            isotp_params = {
-            'stmin': 32,                            # Will request the sender to wait 32ms between consecutive frame. 0-127ms or 100-900ns with values from 0xF1-0xF9
-            'blocksize': 8,                         # Request the sender to send 8 consecutives frames before sending a new flow control message
-            'wftmax': 0,                            # Number of wait frame allowed before triggering an error
-            'tx_data_length': 8,                    # Link layer (CAN layer) works with 8 byte payload (CAN 2.0)
-            # Minimum length of CAN messages. When different from None, messages are padded to meet this length. Works with CAN 2.0 and CAN FD.
-            'tx_data_min_length': None,
-            'tx_padding': 0,                        # Will pad all transmitted CAN messages with byte 0x00.
-            'rx_flowcontrol_timeout': 1000,         # Triggers a timeout if a flow control is awaited for more than 1000 milliseconds
-            'rx_consecutive_frame_timeout': 1000,   # Triggers a timeout if a consecutive frame is awaited for more than 1000 milliseconds
-            'override_receiver_stmin': None,        # When sending, respect the stmin requirement of the receiver. Could be set to a float value in seconds.
-            'max_frame_size': 4095,                 # Limit the size of receive frame.
-            'can_fd': False,                        # Does not set the can_fd flag on the output CAN messages
-            'bitrate_switch': False,                # Does not set the bitrate_switch flag on the output CAN messages
-            'rate_limit_enable': False,             # Disable the rate limiter
-            'rate_limit_max_bitrate': 1000000,      # Ignored when rate_limit_enable=False. Sets the max bitrate when rate_limit_enable=True
-            'rate_limit_window_size': 0.2,          # Ignored when rate_limit_enable=False. Sets the averaging window size for bitrate calculation when rate_limit_enable=True
-            'listen_mode': False,                   # Does not use the listen_mode which prevent transmission.
-            }
-
-            notifier = can.Notifier(self.bus, [can.Printer()])                                       # Add a debug listener that print all messages
-            stack = isotp.NotifierBasedCanStack(bus=self.bus, notifier=notifier, address=isotp_address, params=isotp_params)
-            conn = PythonIsoTpConnection(stack)
-            with Client(conn, config=self.client_config) as client:
+            with Client(self.conn, config=self.client_config) as client:
                 ret = client.change_session(session_type)
-                logger.info(f"return message to changing sessions: {ret}")
+                logger.info(f"return message to changing sessions: {ret}"\)
         except Exception as e:
             logger.error(f"Error in session_control: {e}")
             raise

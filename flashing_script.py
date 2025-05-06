@@ -31,7 +31,7 @@ def send_update(MQTTClient, target: int, update: bytes):
         
 
     logger.info("trying to get can client")
-    client = UDSClient(MQTTClient, 'can0', 500000, 0x123, 0x456)
+    client = UDSClient(MQTTClient, 'can0', 500000, 0x456, 0x123)
     logger.info("Can client created successfully")
     try:
         logger.info("Starting programming session")
