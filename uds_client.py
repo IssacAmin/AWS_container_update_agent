@@ -138,9 +138,9 @@ class UDSClient:
             logger.error(f"Error in communication_disable: {e}")
             raise
 
-    def request_download(self, data_format_identifier, memory_address, memory_size, timeout=1.0):
+    def request_download(self, data_format_identifier, address_and_length_format_identifier, memory_address, memory_size, timeout=1.0):
         try:
-            request_data = data_format_identifier.to_bytes(1, 'big') + memory_address.to_bytes(4, 'big') + memory_size.to_bytes(4, 'big')
+            request_data = data_format_identifier.to_bytes(1, 'big') +  address_and_length_format_identifier.to_bytes(1, 'big') + memory_address.to_bytes(4, 'big') + memory_size.to_bytes(4, 'big')
             return self.send_request(services.RequestDownload, data = request_data, timeout=timeout)
         except Exception as e:
             logger.error(f"Error in request_download: {e}")
@@ -156,7 +156,7 @@ class UDSClient:
 
     def request_transfer_exit(self, timeout=1.0):
         try:
-            return self.send_request(services.RequestTransferExit, b'', timeout=timeout)
+            return self.send_request(services.RequestTransferExit, timeout=timeout)
         except Exception as e:
             logger.error(f"Error in request_transfer_exit: {e}")
             raise

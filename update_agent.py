@@ -170,7 +170,7 @@ def handle_update(payload):
 
 def update_ecu():
     #Todo: call flashscript entry point
-    with open("output.hex","rb") as f:
+    with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
     send_update(0,delta_bytes)
     return
