@@ -5,7 +5,16 @@ from uds_client import UDSClient
 # logging.basicConfig(level=logging.INFO)
 # logger = logging.getLogger(__name__)
 
-def send_update(target: int, update: bytes):
+import paho.mqtt.client as mqtt
+
+def publish_status(client, status, message):
+    payload = {
+        "status": status,
+        "message": message
+    }
+    client.publish(STATUS_TOPIC, json.dumps(payload))
+
+def send_update(MQTTClient, target: int, update: bytes):
     if not isinstance(update, bytes):
         # logger.error("Update data must be of type bytes")
         return
@@ -27,7 +36,9 @@ def send_update(target: int, update: bytes):
         # elif update[i] = 0x10:
         
 
+    publish_status(MQTTClient, "done", "Trying to get CAN Client")
     client = UDSClient('can0', 500000, 0x123, 0x456)
+    publish_status(MQTTClient, "done", "Can Client Created Successfully")
     try:
         # logger.info("Starting programming session")
         response = client.session_control(0x01)  # Start programming session
@@ -80,7 +91,7 @@ def send_update(target: int, update: bytes):
         # logger.info(f"Update sent to target {target}")
     except Exception as e:
         # logger.error(f"An error occurred during the update process: {e}")
-        return
+        publish_status(MQTTClient, "done", "Exception happened somewhere in flashing script")
     finally:
         # logger.info("Shutting down client")
         client.shutdown()
@@ -92,5 +103,5 @@ if __name__ == '__main__':
         
     target = 25
     
-    send_update(target,byte_array)
+    # send_update(target,byte_array)
     pass

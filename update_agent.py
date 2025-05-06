@@ -168,11 +168,11 @@ def handle_update(payload):
             publish_status("done", "ECU update relayed to UDS")
         return
 
-def update_ecu(target_ecu):
+def update_ecu(target_ecu, MQTTClient):
     #Todo: call flashscript entry point
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
-    send_update(target_ecu,delta_bytes)
+    send_update(MQTTClient = MQTTClient, target_ecu,delta_bytes)
     return
 
 def assemble_payload(compressed_payload):
@@ -353,7 +353,7 @@ threading.Thread(target=watch_marketplace_file_and_publish, daemon=True).start()
 
 # Keep main thread alive
 try:
-    update_ecu(0)
+    update_ecu(0, MQTTClient = client)
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
