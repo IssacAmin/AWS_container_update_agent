@@ -1,3 +1,4 @@
+import code
 from uds_client import UDSClient, publish_status
 
 import logging
@@ -27,67 +28,68 @@ def send_update(MQTTClient, target: int, update: bytes):
             i += ins_size
         #TODO:
         # elif update[i] == 0x01:
-        # elif update[i] = 0x10:
+        elif update[i] == 0x10:
+            ins_size = 6
         
 
-    logger.info("trying to get can client")
     client = UDSClient(MQTTClient, 'can0', 500000, 0x456, 0x123)
-    logger.info("Can client created successfully")
+    
     try:
         logger.info("Starting programming session")
         response = client.session_control(0x01)  # Start programming session
-        if not response['positive']:
-            raise Exception(f"Failed to start programming session: {response['code_name']}")
+        if not response.valid or not response.positive:
+            raise Exception(f"Failed to start programming session: {response.code_name}")
         
         #TODO: This should be a double request (session control)
 
-
-        #TODO: ????????????? gbt el seed mnen anta
         # logger.info("Starting security access")
         # response = client.security_access(0x01)
-        if not response['positive']:
-            raise Exception(f"Failed to authenticate: {response['code_name']}")
+        # if not response.valid or not response.positive:
+        #     raise Exception(f"Failed to authenticate: {response['code_name']}")
 
         # logger.info("Disabling communication")
         # response = client.communication_disable(0x02)
         # if not response['positive']:
         #     raise Exception(f"Failed to disable communication: {response['code_name']}")
 
-        # logger.info("Requesting download")
-        response = client.request_download(0x01, 0x01, 0x00000000, len(update))
-        if not response['positive']:
-            raise Exception(f"Failed to request download: {response['code_name']}")
+        logger.info("Requesting download")
+        response = client.request_download(0x00000000, len(update), data_format_identifier=0x01, address_and_length_format_identifier=0x01)
+        #TODO: extract maxNumberOfBlockLength from response
+        
+        if not response.valid or not response.positive:
+            raise Exception(f"Failed to request download: {response.code_name}")
 
-        # logger.info("Transferring data")
+        logger.info("Transferring data")
         block_sequence_counter = 0x01
         for ins in update_segments:
             response = client.transfer_data(block_sequence_counter, ins)
             block_sequence_counter = (block_sequence_counter + 1) % 0x100
-            if not response['positive']:
-                raise Exception(f"Failed to transfer data: {response['code_name']}")
+            if not response.valid or not response.positive:
+                raise Exception(f"Failed to transfer data: {response.code_name}")
 
         #TODO: send new crc
-        # logger.info("Requesting transfer exit")
+        
+        logger.info("Requesting transfer exit")
         response = client.request_transfer_exit()
-        if not response['positive']:
-            raise Exception(f"Failed to request transfer exit: {response['code_name']}")
+        if not response.valid or not response.positive:
+            raise Exception(f"Failed to request transfer exit: {response.code_name}")
 
-        # # logger.info("Resetting ECU")
-        # response = client.ecu_reset(0x01)
-        # if not response['positive']:
-        #     raise Exception(f"Failed to reset ECU: {response['code_name']}")
+        logger.info("Resetting ECU")
+        response = client.ecu_reset(0x01)
+        if not response.valid or not response.positive:
+            raise Exception(f"Failed to reset ECU: {response.code_name}")
 
-        # # logger.info("Switching back to default session")
-        # response = client.session_control(0x01)  # Default session
-        # if not response['positive']:
-        #     raise Exception(f"Failed to switch back to default session: {response['code_name']}")
+        logger.info("Switching back to default session")
+        response = client.session_control(0x01)  # Default session
+        if not response.valid or not response.positive:
+            raise Exception(f"Failed to switch back to default session: {response.code_name}")
 
-        # logger.info(f"Update sent to target {target}")
+        logger.info(f"Update sent to target {target}")
     except Exception as e:
-        # logger.error(f"An error occurred during the update process: {e}")
+        logger.error(f"An error occurred during the update process: {e}")
         publish_status(MQTTClient, "done", "Exception happened somewhere in flashing script")
     finally:
-        # logger.info("Shutting down client")
+        logger.info("Shutting down client")
         client.shutdown()
 
 if __name__ == '__main__':

@@ -160,11 +160,11 @@ def handle_update(payload):
                 prev_segment_no = curr_segment_no
                 curr_segment_no = int(ecu_data.get("segment_no"))
             assemble_payload(ecu_compressed_payload)
-            update_ecu(target_ecu)
+            update_ecu(target_ecu, client)
             publish_status("done", "ECU update segment recieved")
         elif segmented is False:
             prepare_payload(ecu_compressed_payload)
-            update_ecu(target_ecu)
+            update_ecu(target_ecu, client)
             publish_status("done", "ECU update relayed to UDS")
         return
 
@@ -340,7 +340,7 @@ def on_disconnect(client, userdata, rc):
 
 # === MAIN ===
 
-print("version 1.3.4")
+print("version 1.3.15")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect

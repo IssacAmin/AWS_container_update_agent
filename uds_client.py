@@ -1,7 +1,7 @@
+from calendar import c
 import udsoncan
-import udsoncan.Request
 import isotp
-from udsoncan.connections import PythonIsoTpConnection, IsoTPSocketConnection
+from udsoncan.connections import PythonIsoTpConnection
 from udsoncan.client import Client
 from udsoncan.configs import default_client_config
 import can
@@ -65,51 +65,42 @@ class UDSClient:
         'listen_mode': False,                   # Does not use the listen_mode which prevent transmission.
         }
 
-        self.stack = isotp.CanStack(bus=self.bus, notifier=notifier, address=isotp_address, params=isotp_params)
-        self.conn = PythonIsoTpConnection(stack)
+        self.stack = isotp.CanStack(bus=self.bus, address=self.isotp_address, params=self.isotp_params)
+        self.conn = PythonIsoTpConnection(self.stack)
 
-    def custom_security_algo(self, level, seed):
+    def custom_security_algo(self, level: int, seed: bytes, params):
         key = seed
         return key
-
-
-    def handle_response(self, response):
-        try:
-            if response.code == udsoncan.Response.Code.PositiveResponse:
-                return {
-                    'positive': True,
-                    'data': response.data,
-                    'service_id': response.service_id
-                }
-            else:
-                return {
-                    'positive': False,
-                    'code': response.code,
-                    'code_name': response.code_name
-                }
-        except Exception as e:
-            logger.error(f"Error handling response: {e}")
-            raise
 
     def session_control(self, session_type, timeout=1.0):
         try:
             with Client(self.conn, config=self.client_config) as client:
-                ret = client.change_session(session_type)
-                logger.info(f"return message to changing sessions: {ret}"\)
+                response = client.change_session(session_type)
+                if not (response.service == services.DiagnosticSessionControl and response.positive):
+                    raise
+                logger.info(f"return message to changing sessions: {response}")
+                return response
         except Exception as e:
+            #could be invalid response exception
             logger.error(f"Error in session_control: {e}")
             raise
 
     def tester_present(self, timeout=1.0):
         try:
-            return self.send_request(services.TesterPresent, b'', timeout=timeout)
+            # return self.send_request(services.TesterPresent, b'', timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.tester_present()
+                logger.info(f"return message to tester present: {response}")
         except Exception as e:
             logger.error(f"Error in tester_present: {e}")
             raise
 
     def read_did(self, did, timeout=1.0):
         try:
-            return self.send_request(services.ReadDataByIdentifier, did.to_bytes(2, 'big'), timeout=timeout)
+            # return self.send_request(services.ReadDataByIdentifier, did.to_bytes(2, 'big'), timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.read_data_by_identifier(did) 
+                logger.info(f"return message to read did: {response}")
         except Exception as e:
             logger.error(f"Error in read_did: {e}")
             raise
@@ -117,72 +108,88 @@ class UDSClient:
     def write_did(self, did, data, timeout=1.0):
         try:
             request_data = did.to_bytes(2, 'big') + data
-            return self.send_request(services.WriteDataByIdentifier, request_data, timeout=timeout)
+            # return self.send_request(services.WriteDataByIdentifier, request_data, timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.write_data_by_identifier(did, data)
+                logger.info(f"return message to write did: {response}")
         except Exception as e:
             logger.error(f"Error in write_did: {e}")
             raise
 
     def routine_control(self, routine_id, control_type, data=b'', timeout=1.0):
         try:
-            request_data = routine_id.to_bytes(2, 'big') + control_type.to_bytes(1, 'big') + data
-            return self.send_request(services.RoutineControl, request_data, timeout=timeout)
+            # request_data = routine_id.to_bytes(2, 'big') + control_type.to_bytes(1, 'big') + data
+            # return self.send_request(services.RoutineControl, request_data, timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.routine_control(routine_id, control_type, data)
+                logger.info(f"return message to routine control: {response}")
         except Exception as e:
             logger.error(f"Error in routine_control: {e}")
             raise
 
-    #TODO: what seed????
     def security_access(self, level, timeout=1.0):
         try:
-            #request seed
-            request_data = (1+2*(level-1)).to_bytes(1, 'big')
-            response = self.send_request(services.SecurityAccess, request_data, timeout=timeout)
-            if not response['positive']:
-                return response
-            seed = response['data'][1:]
-            key = getKey(seed)
-            
-            #send key
-            #TODO: verify seed size
-            #TODO: check the key.to_bytes
-            request_data = (2*level).to_bytes(1,'big') + key.to_bytes()
-            return self.send_request(services.SecurityAccess, request_data, timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.unlock_security_access(level)
         except Exception as e:
             logger.error(f"Error in security_access: {e}")
             raise
 
+    #TODO: parameters should be modified
     def communication_disable(self, communication_type, timeout=1.0):
         try:
-            return self.send_request(services.CommunicationControl, communication_type.to_bytes(1, 'big'), timeout=timeout)
+            # return self.send_request(services.CommunicationControl, communication_type.to_bytes(1, 'big'), timeout=timeout)
+            # with Client(self.conn, config=self.client_config) as client:
+                # response = client.communication_control(communication_type)
+            return
         except Exception as e:
             logger.error(f"Error in communication_disable: {e}")
             raise
 
-    def request_download(self, data_format_identifier, address_and_length_format_identifier, memory_address, memory_size, timeout=1.0):
+    def request_download(self, memory_address, memory_size, timeout=1.0, data_format_identifier = None, address_and_length_format_identifier = None):
         try:
-            request_data = data_format_identifier.to_bytes(1, 'big') +  address_and_length_format_identifier.to_bytes(1, 'big') + memory_address.to_bytes(4, 'big') + memory_size.to_bytes(4, 'big')
-            return self.send_request(services.RequestDownload, data = request_data, timeout=timeout)
+            # request_data = data_format_identifier.to_bytes(1, 'big') +  address_and_length_format_identifier.to_bytes(1, 'big') + memory_address.to_bytes(4, 'big') + memory_size.to_bytes(4, 'big')
+            # return self.send_request(services.RequestDownload, data = request_data, timeout=timeout)
+            
+            memoryLocInstance = udsoncan.MemoryLocation(memory_address, memory_size, address_and_length_format_identifier)
+            
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.request_download(memoryLocInstance, data_format_identifier)
+                logger.info(f"return message to request download: {response}")
+                return response
         except Exception as e:
             logger.error(f"Error in request_download: {e}")
             raise
 
     def transfer_data(self, block_sequence_counter, data, timeout=1.0):
         try:
-            request_data = block_sequence_counter.to_bytes(1, 'big') + data
-            return self.send_request(services.TransferData, request_data, timeout=timeout)
+            # request_data = block_sequence_counter.to_bytes(1, 'big') + data
+            # return self.send_request(services.TransferData, request_data, timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.transfer_data(block_sequence_counter, data.to_bytes())
+                return response
         except Exception as e:
             logger.error(f"Error in transfer_data: {e}")
             raise
 
     def request_transfer_exit(self, timeout=1.0):
         try:
-            return self.send_request(services.RequestTransferExit, timeout=timeout)
+            # return self.send_request(services.RequestTransferExit, timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.request_transfer_exit()                
+                logger.info(f"return message to request transfer exit: {response}")
+                return response
         except Exception as e:
             logger.error(f"Error in request_transfer_exit: {e}")
             raise
 
     def ecu_reset(self, reset_type, timeout=1.0):
         try:
-            return self.send_request(services.ECUReset, subfunction = reset_type, timeout=timeout)
+            # return self.send_request(services.ECUReset, subfunction = reset_type, timeout=timeout)
+            with Client(self.conn, config=self.client_config) as client:
+                response = client.ecu_reset(reset_type)
+                logger.info(f"return message to ecu reset: {response}")
+                return response
         except Exception as e:
             logger.error(f"Error in ecu_reset: {e}")
             raise
@@ -196,23 +203,6 @@ class UDSClient:
             raise
 
 if __name__ == "__main__":
-    CAN_INTERFACE = 'can0'
-    CAN_BITRATE = 500000 # TODO
-    ECU_ADDRESS = 0x123
-    HMI_ADDRESS = 0x456
+    while True:
+        continue
 
-    client = UDSClient(CAN_INTERFACE, CAN_BITRATE, ECU_ADDRESS, HMI_ADDRESS)
-
-    try:
-        did = 0xF190
-        response = client.read_did(did)
-        if response['positive']:
-            print(f'Read DID 0x{did:x}: {response["data"]}')
-        else:
-            print(f'Error reading DID 0x{did:x}: {response["code_name"]}')
-
-    except Exception as e:
-        logger.error(f'Error: {e}')
-
-    finally:
-        client.shutdown()
