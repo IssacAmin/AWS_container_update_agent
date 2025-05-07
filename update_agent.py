@@ -221,7 +221,7 @@ def prepare_payload(payload):
     print("compressed bytes:  " + str(compressed_bytes))
     decompressed_bytes = zlib.decompress(compressed_bytes)
     print("decompressed bytes:  " + str(decompressed_bytes))
-    with open("output.hex","wb") as f:
+    with open("deltafile.hex","wb") as f:
         f.write(decompressed_bytes)
     publish_status("done", "recieved payload successfully")
     return
