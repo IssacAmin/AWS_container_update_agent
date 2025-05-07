@@ -160,13 +160,13 @@ class UDSClient:
             logger.error(f"Error in request_download: {e}")
             raise
 
-    def transfer_data(self, block_sequence_counter, data, timeout=1.0):
+    def transfer_data(self, block_sequence_counter, data : bytes, timeout=1.0):
         try:
             self.client_config['p2_timeout'] = timeout
             # request_data = block_sequence_counter.to_bytes(1, 'big') + data
             # return self.send_request(services.TransferData, request_data, timeout=timeout)
             with Client(self.conn, config=self.client_config) as client:
-                response = client.transfer_data(block_sequence_counter, data.to_bytes())
+                response = client.transfer_data(block_sequence_counter, data)
                 return response
         except Exception as e:
             logger.error(f"Error in transfer_data: {e}")
