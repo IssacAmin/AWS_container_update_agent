@@ -74,6 +74,7 @@ class UDSClient:
 
     def session_control(self, session_type, timeout=1.0):
         try:
+            self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
                 response = client.change_session(session_type)
                 if not response.service == services.DiagnosticSessionControl:
@@ -87,7 +88,7 @@ class UDSClient:
 
     def tester_present(self, timeout=1.0):
         try:
-            # return self.send_request(services.TesterPresent, b'', timeout=timeout)
+            self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
                 response = client.tester_present()
                 logger.info(f"return message to tester present: {response}")
@@ -97,7 +98,7 @@ class UDSClient:
 
     def read_did(self, did, timeout=1.0):
         try:
-            # return self.send_request(services.ReadDataByIdentifier, did.to_bytes(2, 'big'), timeout=timeout)
+            self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
                 response = client.read_data_by_identifier(did) 
                 logger.info(f"return message to read did: {response}")
@@ -107,8 +108,7 @@ class UDSClient:
 
     def write_did(self, did, data, timeout=1.0):
         try:
-            request_data = did.to_bytes(2, 'big') + data
-            # return self.send_request(services.WriteDataByIdentifier, request_data, timeout=timeout)
+            self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
                 response = client.write_data_by_identifier(did, data)
                 logger.info(f"return message to write did: {response}")
@@ -118,8 +118,7 @@ class UDSClient:
 
     def routine_control(self, routine_id, control_type, data=b'', timeout=1.0):
         try:
-            # request_data = routine_id.to_bytes(2, 'big') + control_type.to_bytes(1, 'big') + data
-            # return self.send_request(services.RoutineControl, request_data, timeout=timeout)
+            self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
                 response = client.routine_control(routine_id, control_type, data)
                 logger.info(f"return message to routine control: {response}")
@@ -129,6 +128,7 @@ class UDSClient:
 
     def security_access(self, level, timeout=1.0):
         try:
+            self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
                 response = client.unlock_security_access(level)
         except Exception as e:
@@ -138,6 +138,7 @@ class UDSClient:
     #TODO: parameters should be modified
     def communication_disable(self, communication_type, timeout=1.0):
         try:
+            self.client_config['p2_timeout'] = timeout
             # return self.send_request(services.CommunicationControl, communication_type.to_bytes(1, 'big'), timeout=timeout)
             # with Client(self.conn, config=self.client_config) as client:
                 # response = client.communication_control(communication_type)
@@ -146,13 +147,10 @@ class UDSClient:
             logger.error(f"Error in communication_disable: {e}")
             raise
 
-    def request_download(self, memory_address, memory_size, timeout=1.0, data_format_identifier = None, address_and_length_format_identifier = None):
+    def request_download(self, memory_address, memory_size,address_format, memory_size_format, data_format_identifier = None , timeout=1.0):
         try:
-            # request_data = data_format_identifier.to_bytes(1, 'big') +  address_and_length_format_identifier.to_bytes(1, 'big') + memory_address.to_bytes(4, 'big') + memory_size.to_bytes(4, 'big')
-            # return self.send_request(services.RequestDownload, data = request_data, timeout=timeout)
-            
-            memoryLocInstance = udsoncan.MemoryLocation(memory_address, memory_size, address_and_length_format_identifier)
-            
+            self.client_config['p2_timeout'] = timeout
+            memoryLocInstance = udsoncan.MemoryLocation(memory_address, memory_size, address_format, memory_size_format)
             with Client(self.conn, config=self.client_config) as client:
                 response = client.request_download(memoryLocInstance, data_format_identifier)
                 logger.info(f"return message to request download: {response}")
@@ -163,6 +161,7 @@ class UDSClient:
 
     def transfer_data(self, block_sequence_counter, data, timeout=1.0):
         try:
+            self.client_config['p2_timeout'] = timeout
             # request_data = block_sequence_counter.to_bytes(1, 'big') + data
             # return self.send_request(services.TransferData, request_data, timeout=timeout)
             with Client(self.conn, config=self.client_config) as client:
@@ -174,6 +173,7 @@ class UDSClient:
 
     def request_transfer_exit(self, timeout=1.0):
         try:
+            self.client_config['p2_timeout'] = timeout
             # return self.send_request(services.RequestTransferExit, timeout=timeout)
             with Client(self.conn, config=self.client_config) as client:
                 response = client.request_transfer_exit()                
@@ -185,6 +185,7 @@ class UDSClient:
 
     def ecu_reset(self, reset_type, timeout=1.0):
         try:
+            self.client_config['p2_timeout'] = timeout
             # return self.send_request(services.ECUReset, subfunction = reset_type, timeout=timeout)
             with Client(self.conn, config=self.client_config) as client:
                 response = client.ecu_reset(reset_type)

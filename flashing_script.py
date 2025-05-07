@@ -38,7 +38,7 @@ def send_update(MQTTClient, target: int, update: bytes):
     
     try:
         logger.info("Starting programming session")
-        response = client.session_control(0x01, timeout=60)  # Start programming session (long timeout because erasing flashbank takes a long time)
+        response = client.session_control(0x01, timeout=300)  # Start programming session (long timeout because erasing flashbank takes a long time)
         if not response.valid:
             raise Exception(f"Failed to start programming session: {response.code_name}")
         if not response.positive:
@@ -47,7 +47,7 @@ def send_update(MQTTClient, target: int, update: bytes):
                 if not response.valid or not response.positive:
                     raise Exception(f"Failed to reset ECU: {response.code_name}")
                 else:
-                    response = client.session_control(0x01, timeout=60)
+                    response = client.session_control(0x01, timeout=300)
             else: 
                 raise Exception(f"Failed to start programming session: {response.code_name}")
                        
@@ -62,7 +62,7 @@ def send_update(MQTTClient, target: int, update: bytes):
         #     raise Exception(f"Failed to disable communication: {response['code_name']}")
 
         logger.info("Requesting download")
-        response = client.request_download(0x00000000, len(update), data_format_identifier=0x01, address_and_length_format_identifier=0x01)
+        response = client.request_download(0x00000000, len(update), 32, 32, 0x01)
         #TODO: extract maxNumberOfBlockLength from response
         
         if not response.valid or not response.positive:
