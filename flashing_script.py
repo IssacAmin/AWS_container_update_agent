@@ -62,7 +62,7 @@ def send_update(MQTTClient, target: int, update: bytes):
         #     raise Exception(f"Failed to disable communication: {response['code_name']}")
 
         logger.info("Requesting download")
-        response = client.request_download(0x00000000, len(update), 32, 32, 0x01)
+        response = client.request_download(0x00000000, len(update), 32, 32, 0, 0)
         #TODO: extract maxNumberOfBlockLength from response
         
         if not response.valid or not response.positive:

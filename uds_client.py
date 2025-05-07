@@ -147,12 +147,13 @@ class UDSClient:
             logger.error(f"Error in communication_disable: {e}")
             raise
 
-    def request_download(self, memory_address, memory_size,address_format, memory_size_format, data_format_identifier = None , timeout=1.0):
+    def request_download(self, memory_address, memory_size,address_format, memory_size_format, compression, encryption , timeout=1.0):
         try:
+            dfi = udsoncan.DataFormatIdentifier(compression, encryption)
             self.client_config['p2_timeout'] = timeout
             memoryLocInstance = udsoncan.MemoryLocation(memory_address, memory_size, address_format, memory_size_format)
             with Client(self.conn, config=self.client_config) as client:
-                response = client.request_download(memoryLocInstance, data_format_identifier)
+                response = client.request_download(memoryLocInstance, dfi)
                 logger.info(f"return message to request download: {response}")
                 return response
         except Exception as e:
