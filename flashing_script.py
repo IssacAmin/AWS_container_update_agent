@@ -1,4 +1,6 @@
 import code
+
+import udsoncan.ResponseCode
 from uds_client import UDSClient, publish_status
 
 import logging
@@ -7,7 +9,7 @@ import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-
+import udsoncan
 
 def send_update(MQTTClient, target: int, update: bytes):
     if not isinstance(update, bytes):
@@ -36,12 +38,19 @@ def send_update(MQTTClient, target: int, update: bytes):
     
     try:
         logger.info("Starting programming session")
-        response = client.session_control(0x01)  # Start programming session
-        if not response.valid or not response.positive:
+        response = client.session_control(0x01, timeout=60)  # Start programming session (long timeout because erasing flashbank takes a long time)
+        if not response.valid:
             raise Exception(f"Failed to start programming session: {response.code_name}")
-        
-        #TODO: This should be a double request (session control)
-
+        if not response.positive:
+            if response.code_name == udsoncan.ResponseCode.ResponseCode.RequestCorrectlyReceived_ResponsePending:
+                response = client.ecu_reset(0x01)
+                if not response.valid or not response.positive:
+                    raise Exception(f"Failed to reset ECU: {response.code_name}")
+                else:
+                    response = client.session_control(0x01, timeout=60)
+            else: 
+                raise Exception(f"Failed to start programming session: {response.code_name}")
+                       
         # logger.info("Starting security access")
         # response = client.security_access(0x01)
         # if not response.valid or not response.positive:

@@ -76,7 +76,7 @@ class UDSClient:
         try:
             with Client(self.conn, config=self.client_config) as client:
                 response = client.change_session(session_type)
-                if not (response.service == services.DiagnosticSessionControl and response.positive):
+                if not response.service == services.DiagnosticSessionControl:
                     raise
                 logger.info(f"return message to changing sessions: {response}")
                 return response
