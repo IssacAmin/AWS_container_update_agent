@@ -71,6 +71,7 @@ def send_update(MQTTClient, target: int, update: bytes):
         logger.info("Transferring data")
         block_sequence_counter = 0x01
         for ins in update_segments:
+            logger.info(f"Transferring instruction: {ins.hex()}")
             response = client.transfer_data(block_sequence_counter, ins)
             block_sequence_counter = (block_sequence_counter + 1) % 0x100
             if not response.valid or not response.positive:

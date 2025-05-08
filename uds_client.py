@@ -52,7 +52,7 @@ class UDSClient:
         'tx_data_length': 8,                    # Link layer (CAN layer) works with 8 byte payload (CAN 2.0)
         # Minimum length of CAN messages. When different from None, messages are padded to meet this length. Works with CAN 2.0 and CAN FD.
         'tx_data_min_length': None,
-        'tx_padding': 0,                        # Will pad all transmitted CAN messages with byte 0x00.
+        'tx_padding': 0x55,                     # Will pad all transmitted CAN messages with byte 0x5.
         'rx_flowcontrol_timeout': 1000,         # Triggers a timeout if a flow control is awaited for more than 1000 milliseconds
         'rx_consecutive_frame_timeout': 1000,   # Triggers a timeout if a consecutive frame is awaited for more than 1000 milliseconds
         'override_receiver_stmin': None,        # When sending, respect the stmin requirement of the receiver. Could be set to a float value in seconds.
@@ -72,7 +72,7 @@ class UDSClient:
         key = seed
         return key
 
-    def session_control(self, session_type, timeout=1.0):
+    def session_control(self, session_type, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
@@ -86,7 +86,7 @@ class UDSClient:
             logger.error(f"Error in session_control: {e}")
             raise
 
-    def tester_present(self, timeout=1.0):
+    def tester_present(self, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
@@ -96,7 +96,7 @@ class UDSClient:
             logger.error(f"Error in tester_present: {e}")
             raise
 
-    def read_did(self, did, timeout=1.0):
+    def read_did(self, did, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
@@ -106,7 +106,7 @@ class UDSClient:
             logger.error(f"Error in read_did: {e}")
             raise
 
-    def write_did(self, did, data, timeout=1.0):
+    def write_did(self, did, data, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
@@ -126,7 +126,7 @@ class UDSClient:
             logger.error(f"Error in routine_control: {e}")
             raise
 
-    def security_access(self, level, timeout=1.0):
+    def security_access(self, level, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
@@ -136,7 +136,7 @@ class UDSClient:
             raise
 
     #TODO: parameters should be modified
-    def communication_disable(self, communication_type, timeout=1.0):
+    def communication_disable(self, communication_type, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             # return self.send_request(services.CommunicationControl, communication_type.to_bytes(1, 'big'), timeout=timeout)
@@ -172,7 +172,7 @@ class UDSClient:
             logger.error(f"Error in transfer_data: {e}")
             raise
 
-    def request_transfer_exit(self, timeout=1.0):
+    def request_transfer_exit(self, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             # return self.send_request(services.RequestTransferExit, timeout=timeout)
@@ -184,7 +184,7 @@ class UDSClient:
             logger.error(f"Error in request_transfer_exit: {e}")
             raise
 
-    def ecu_reset(self, reset_type, timeout=1.0):
+    def ecu_reset(self, reset_type, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             # return self.send_request(services.ECUReset, subfunction = reset_type, timeout=timeout)
