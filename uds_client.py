@@ -122,6 +122,7 @@ class UDSClient:
             with Client(self.conn, config=self.client_config) as client:
                 response = client.start_routine(routine_id)
                 logger.info(f"return message to routine control: {response}")
+                return response
         except Exception as e:
             logger.error(f"Error in routine_control: {e}")
             raise
@@ -129,8 +130,10 @@ class UDSClient:
     def security_access(self, level, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
+            response = None
             with Client(self.conn, config=self.client_config) as client:
                 response = client.unlock_security_access(level)
+                return response
         except Exception as e:
             logger.error(f"Error in security_access: {e}")
             raise
