@@ -116,11 +116,11 @@ class UDSClient:
             logger.error(f"Error in write_did: {e}")
             raise
 
-    def routine_control(self, routine_id, control_type, data=b'', timeout=1.0):
+    def routine_control(self, routine_id,timeout=1.0):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
-                response = client.routine_control(routine_id, control_type, data)
+                response = client.start_routine(routine_id)
                 logger.info(f"return message to routine control: {response}")
         except Exception as e:
             logger.error(f"Error in routine_control: {e}")
@@ -160,7 +160,7 @@ class UDSClient:
             logger.error(f"Error in request_download: {e}")
             raise
 
-    def transfer_data(self, block_sequence_counter, data : bytes, timeout=1.0):
+    def transfer_data(self, block_sequence_counter, data : bytes, timeout=300.0):
         try:
             self.client_config['p2_timeout'] = timeout
             # request_data = block_sequence_counter.to_bytes(1, 'big') + data

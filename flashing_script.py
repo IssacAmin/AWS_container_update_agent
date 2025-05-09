@@ -38,7 +38,7 @@ def send_update(MQTTClient, target: int, update: bytes):
     
     try:
         logger.info("Starting programming session")
-        response = client.session_control(0x01, timeout=300)  # Start programming session (long timeout because erasing flashbank takes a long time)
+        response = client.session_control(0x01, timeout=300)  # Start programming session
         if not response.valid:
             raise Exception(f"Failed to start programming session: {response.code_name}")
         if not response.positive:
@@ -50,12 +50,17 @@ def send_update(MQTTClient, target: int, update: bytes):
                     response = client.session_control(0x01, timeout=300)
             else: 
                 raise Exception(f"Failed to start programming session: {response.code_name}")
-                       
-        # logger.info("Starting security access")
-        # response = client.security_access(0x01)
-        # if not response.valid or not response.positive:
-        #     raise Exception(f"Failed to authenticate: {response['code_name']}")
-
+                        
+        logger.info("Starting security access")
+        response = client.security_access(1)
+        if not response.valid or not response.positive:
+            raise Exception(f"failed to get security access")
+        
+        logger.info("Starting routine control for flashbank reset")
+        response = client.routine_control(1, 1000) #flashbank erase takes a long time
+        if not response.valid or not response.positive:
+            raise Exception(f"failed to run erase flashbank routine")
+        
         # logger.info("Disabling communication")
         # response = client.communication_disable(0x02)
         # if not response['positive']:
