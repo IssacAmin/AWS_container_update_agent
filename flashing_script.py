@@ -37,6 +37,11 @@ def send_update(MQTTClient, target: int, update: bytes):
     client = UDSClient(MQTTClient, 'can0', 500000, 0x456, 0x123)
     
     try:
+        logger.info("Starting security access")
+        response = client.security_access(1)
+        if not response.valid or not response.positive:
+            raise Exception(f"failed to get security access")
+        
         logger.info("Starting programming session")
         response = client.session_control(0x01, timeout=300)  # Start programming session
         if not response.valid:
@@ -51,10 +56,6 @@ def send_update(MQTTClient, target: int, update: bytes):
             else: 
                 raise Exception(f"Failed to start programming session: {response.code_name}")
                         
-        logger.info("Starting security access")
-        response = client.security_access(1)
-        if not response.valid or not response.positive:
-            raise Exception(f"failed to get security access")
         
         logger.info("Starting routine control for flashbank reset")
         response = client.routine_control(1, 1000) #flashbank erase takes a long time
