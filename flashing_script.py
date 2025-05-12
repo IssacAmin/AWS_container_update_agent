@@ -58,7 +58,7 @@ def send_update(MQTTClient, target: int, update: bytes):
                         
         
         logger.info("Starting routine control for flashbank reset")
-        response = client.routine_control(1, 1000) #flashbank erase takes a long time
+        response = client.routine_control(0xff00, 1000) #flashbank erase takes a long time
         if not response.valid or not response.positive:
             raise Exception(f"failed to run erase flashbank routine")
         

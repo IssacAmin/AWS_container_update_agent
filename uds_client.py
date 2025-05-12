@@ -38,6 +38,7 @@ class UDSClient:
         self.default_retries = default_retries
         self.client_config = default_client_config.copy()
         self.client_config['security_algo'] = self.custom_security_algo
+        self.client_config['request_timeout'] = None
         try:
             self.bus = can.Bus(interface="socketcan", channel=self.can_interface, bitrate=self.can_bitrate)
         except Exception as e:
@@ -122,6 +123,11 @@ class UDSClient:
             with Client(self.conn, config=self.client_config) as client:
                 response = client.start_routine(routine_id)
                 logger.info(f"return message to routine control: {response}")
+                response = client.get_routine_result(routine_id)
+                while response.data[4] != 0x02:
+                    response = client.get_routine_result(routine_id)
+                    logger.info(f"return message to routine control: {response}")
+                    logger.info(f"response data: {response.data}")
                 return response
         except Exception as e:
             logger.error(f"Error in routine_control: {e}")
