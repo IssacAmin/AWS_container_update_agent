@@ -9,6 +9,7 @@ import logging
 from udsoncan import services
 import paho.mqtt.client as mqtt
 import json
+import time
 
 STATUS_TOPIC = "status/jetson-nano-devkit"
 
@@ -124,10 +125,12 @@ class UDSClient:
                 response = client.start_routine(routine_id)
                 logger.info(f"return message to routine control: {response}")
                 response = client.get_routine_result(routine_id)
-                while response.data[4] != 0x02:
+                while response.data[3] != 0x02:
+                    time.sleep(0.005)
                     response = client.get_routine_result(routine_id)
                     logger.info(f"return message to routine control: {response}")
                     logger.info(f"response data: {response.data}")
+                    
                 return response
         except Exception as e:
             logger.error(f"Error in routine_control: {e}")
