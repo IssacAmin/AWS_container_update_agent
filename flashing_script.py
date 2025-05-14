@@ -22,16 +22,16 @@ def send_update(MQTTClient, target: int, update: bytes):
     while i < len(update):
         if update[i] == 0x11:
             ins_size = 9
-            update_segments.append(update[i:i+ins_size])
-            i += ins_size
         elif update[i] == 0x00:
             ins_size = 9 + int.from_bytes(update[i+5:i+9], 'big')
-            update_segments.append(update[i:i+ins_size])
-            i += ins_size
-        #TODO:
-        # elif update[i] == 0x01:
+        elif update[i] == 0x01:
+            ins_size = 9
         elif update[i] == 0x10:
-            ins_size = 6
+            ins_size = 7
+        else:
+            raise Exception(f"Unknown instruction type: {update[i]}")
+        update_segments.append(update[i:i+ins_size])
+        i += ins_size
         
 
     client = UDSClient(MQTTClient, 'can0', 500000, 0x456, 0x123)
@@ -82,8 +82,6 @@ def send_update(MQTTClient, target: int, update: bytes):
             block_sequence_counter = (block_sequence_counter + 1) % 0x100
             if not response.valid or not response.positive:
                 raise Exception(f"Failed to transfer data: {response.code_name}")
-
-        #TODO: send new crc
         
         logger.info("Requesting transfer exit")
         response = client.request_transfer_exit()

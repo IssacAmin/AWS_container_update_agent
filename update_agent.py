@@ -340,7 +340,7 @@ def on_disconnect(client, userdata, rc):
 
 # === MAIN ===
 
-print("version 1.3.27")
+print("version 1.3.28")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect
