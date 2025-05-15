@@ -43,7 +43,7 @@ def send_update(MQTTClient, target: int, update: bytes):
             raise Exception(f"failed to get security access")
         
         logger.info("Starting programming session")
-        response = client.session_control(0x01, timeout=300)  # Start programming session
+        response = client.session_control(0x02, timeout=300)  # Start programming session
         if not response.valid:
             raise Exception(f"Failed to start programming session: {response.code_name}")
         if not response.positive:
