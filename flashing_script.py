@@ -88,11 +88,21 @@ def send_update(MQTTClient, target: int, update: bytes):
         if not response.valid or not response.positive:
             raise Exception(f"Failed to request transfer exit: {response.code_name}")
 
+        logger.info("validating app")
+        response = client.routine_control(0xff01, 1000, data = bytes([1]))
+        if not response.valid or not response.positive:
+            raise Exception(f"failed to validate app")
+        
+        logger.info("switching app")
+        response = client.routine_control(0xff02, 1000, data = bytes([1])) 
+        if not response.valid or not response.positive:
+            raise Exception(f"failed to switch to new app")
+        
         logger.info("Resetting ECU")
         response = client.ecu_reset(0x01)
         if not response.valid or not response.positive:
             raise Exception(f"Failed to reset ECU: {response.code_name}")
-
+        
         logger.info("Switching back to default session")
         response = client.session_control(0x01)  # Default session
         if not response.valid or not response.positive:

@@ -118,13 +118,13 @@ class UDSClient:
             logger.error(f"Error in write_did: {e}")
             raise
 
-    def routine_control(self, routine_id,timeout=1.0):
+    def routine_control(self, routine_id, timeout=1.0, data = None):
         try:
             self.client_config['p2_timeout'] = timeout
             with Client(self.conn, config=self.client_config) as client:
-                response = client.start_routine(routine_id)
+                response = client.start_routine(routine_id, data)
                 logger.info(f"return message to routine control: {response}")
-                response = client.get_routine_result(routine_id)
+                response = client.get_routine_result(routine_id, data)
                 while response.data[3] != 0x02:
                     time.sleep(0.005)
                     response = client.get_routine_result(routine_id)
