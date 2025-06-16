@@ -340,7 +340,7 @@ def on_disconnect(client, userdata, rc):
 
 # === MAIN ===
 
-print("version 1.4.1")
+print("version 1.4.2")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect
@@ -354,7 +354,7 @@ threading.Thread(target=watch_marketplace_file_and_publish, daemon=True).start()
 
 # Keep main thread alive
 try:
-    update_ecu(target_ecu = 0, MQTTClient = client)
+    # update_ecu(target_ecu = 0, MQTTClient = client)
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
