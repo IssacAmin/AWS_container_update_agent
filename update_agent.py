@@ -40,7 +40,7 @@ MARKETPLACE_SUBSCRIBE_TOPIC = f"marketplace/{DEVICE_ID}"
 REQUESTS_TOPIC = f"requests/{DEVICE_ID}"
 STATUS_TOPIC = f"status/{DEVICE_ID}"
 ONBOOT_TOPIC = f"on-boot/{DEVICE_ID}"
-
+UPDATE_DB_TOPIC = f"update-db/{DEVICE_ID}"
 FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "requests.json")
 MARKETPLACE_FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "marketplace_requests.json")
 POLL_INTERVAL = 1  # seconds
@@ -114,6 +114,13 @@ def commit_app_update_version(target, version):
             })
             atomic_json_write_safe(applications_data,ecu_applications_json_path)
             print(f"updated '{target}' version in ecu_applications.json.")
+    
+    payload = {
+    "update_target": "hmi",
+    "name": target,
+    "version": version
+    }
+    client.publish(UPDATE_DB_TOPIC,json.dumps(payload))
     return
 
 def atomic_json_write_safe(data, filename):
@@ -220,7 +227,12 @@ def handle_update(payload):
             })
             atomic_json_write_safe(features_data,installed_features_json_path)
             print(f"Added feature '{feature_name}' to installed_features.json.")
-            publish_status("Update done", "container updated successfully Version" + update_version)
+            payload = {
+                "update_target": "hmi",
+                "name": feature_name,
+                "version": update_version
+            }
+            client.publish(UPDATE_DB_TOPIC,json.dumps(payload))
 
     elif update_target == "ECU":
         json_dir = os.path.join(SCRIPT_DIR, "json")
