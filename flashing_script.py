@@ -1,15 +1,11 @@
-import code
-
 import udsoncan.ResponseCode
 from uds_client import UDSClient, publish_status
-
 import logging
-
 #Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-import udsoncan
+
 
 def send_update(MQTTClient, target: int, update: bytes):
     if not isinstance(update, bytes):
@@ -107,7 +103,6 @@ def send_update(MQTTClient, target: int, update: bytes):
         response = client.session_control(0x01)  # Default session
         if not response.valid or not response.positive:
             raise Exception(f"Failed to switch back to default session: {response.code_name}")
-
         logger.info(f"Update sent to target {target}")
     except Exception as e:
         logger.error(f"An error occurred during the update process: {e}")

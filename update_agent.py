@@ -9,6 +9,9 @@ import base64
 import zlib
 from flashing_script import  send_update
 import hashlib
+import tempfile
+import fcntl
+
 
 # === GLOBAL VARIABLES === #
 ecu_update_id = ""
@@ -36,6 +39,7 @@ MARKETPLACE_PUBLISH_TOPIC = f"marketplace_requests/{DEVICE_ID}"
 MARKETPLACE_SUBSCRIBE_TOPIC = f"marketplace/{DEVICE_ID}"
 REQUESTS_TOPIC = f"requests/{DEVICE_ID}"
 STATUS_TOPIC = f"status/{DEVICE_ID}"
+ONBOOT_TOPIC = f"on-boot/{DEVICE_ID}"
 
 FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "requests.json")
 MARKETPLACE_FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "marketplace_requests.json")
@@ -57,6 +61,82 @@ client.tls_insecure_set(False)
 
 
 # === FUNCTIONALITY === #
+def notify_cloud_onboot():
+    json_dir = os.path.join(SCRIPT_DIR, "json")
+    installed_features_json_path = os.path.join(json_dir, "installed_features.json")
+    ecu_applications_json_path = os.path.join(json_dir, "ecu_applications.json")
+
+    #checking current features and adding to them if it does not exist
+    applications_data = { "applications": [] }
+    if os.path.exists(ecu_applications_json_path):
+        with open(ecu_applications_json_path, "r") as f:
+            try:
+                applications_data = json.load(f)
+            except json.JSONDecodeError:
+                print("Warning: Failed to decode JSON, starting fresh.")
+
+    features_data = { "features": [] }
+    if os.path.exists(installed_features_json_path):
+        with open(installed_features_json_path, "r") as f:
+            try:
+                features_data = json.load(f)
+            except json.JSONDecodeError:
+                print("Warning: Failed to decode JSON, starting fresh.")
+    
+    payload = {
+        "id": DEVICE_ID,
+        "applications": applications_data["applications"],
+        "features": features_data["features"]
+    }
+    
+    print(payload)
+    client.publish(ONBOOT_TOPIC, json.dumps(payload))    
+    return
+
+def commit_app_update_version(target, version):
+    json_dir = os.path.join(SCRIPT_DIR, "json")
+    ecu_applications_json_path = os.path.join(json_dir, "ecu_applications.json")
+    #checking current features and adding to them if it does not exist
+    applications_data = { "applications": [] }
+    if os.path.exists(ecu_applications_json_path):
+        with open(ecu_applications_json_path, "r") as f:
+            try:
+                applications_data = json.load(f)
+            except json.JSONDecodeError:
+                print("Warning: Failed to decode JSON, starting fresh.")
+
+        # Add new feature if not already installed
+        feature_exists = any(feature["name"] == target for feature in applications_data["applications"])
+        if not feature_exists:
+            applications_data["features"].append({
+                "name": target,
+                "version": version
+            })
+            atomic_json_write_safe(applications_data,ecu_applications_json_path)
+            print(f"updated '{target}' version in ecu_applications.json.")
+    return
+
+def atomic_json_write_safe(data, filename):
+    lockfile_path = filename + ".lock"
+    dirname = os.path.dirname(filename)
+
+    with open(lockfile_path, "w") as lockfile:
+        # Acquire lock to prevent concurrent writes
+        fcntl.flock(lockfile, fcntl.LOCK_EX)
+
+        try:
+            # Write to temp file
+            with tempfile.NamedTemporaryFile("w", dir=dirname, delete=False) as tmpfile:
+                json.dump(data, tmpfile)
+                tmpfile.flush()
+                os.fsync(tmpfile.fileno())
+                temp_name = tmpfile.name
+
+            # Atomically replace the original file
+            os.replace(temp_name, filename)
+
+        finally:
+            fcntl.flock(lockfile, fcntl.LOCK_UN)
 
 def run_command(cmd):
     print(f"Running: {cmd}")
@@ -83,12 +163,13 @@ def handle_update(payload):
     global prev_segment_no 
     global first_segment 
     global total_segments 
-    global segments 
+    global segments
+    
     update_target = payload.get("update_target")
-
+    update_version = -1
     if not update_target:
         print("error update target wrong")
-        publish_status("error", "Missing 'update_target'")
+        publish_status("Update failed", "Missing 'update_target'")
         return
 
     if update_target == "HMI":
@@ -96,26 +177,35 @@ def handle_update(payload):
         action = hmi_data.get("action")
         manifest = hmi_data.get("manifest")
         feature_name = hmi_data.get("feature_name")
+        update_version = hmi_data.get("container_version")
         if not action or not manifest:
             print("error action or manifest wrong")
-            publish_status("error", "Missing 'action' or 'manifest' in HMI_meta_data")
+            publish_status("Update failed", "Missing 'action' or 'manifest' in HMI_meta_data")
             return
 
         container_id = manifest.get("container_id")
         if not container_id:
-            publish_status("error", "Manifest missing 'container_id'")
+            publish_status("Update failed", "Manifest missing 'container_id'")
             return
 
         manifest_dir = os.path.join(SCRIPT_DIR, "manifests")
         manifest_path = os.path.join(manifest_dir, f"{container_id}.json")
 
         json_dir = os.path.join(SCRIPT_DIR, "json")
-        json_path = os.path.join(json_dir, "installed_features.json")
+        installed_features_json_path = os.path.join(json_dir, "installed_features.json")
+        
+        #Adding the new container manifest
         os.makedirs(manifest_dir, exist_ok=True)
+        try:
+            atomic_json_write_safe(manifest,manifest_path)
+        except Exception as e:
+            publish_status("error", f"Failed to write manifest: {e}")
+            return
+        
+        #checking current features and adding to them if it does not exist
         features_data = { "features": [] }
-
-        if os.path.exists(json_path):
-            with open(json_path, "r") as f:
+        if os.path.exists(installed_features_json_path):
+            with open(installed_features_json_path, "r") as f:
                 try:
                     features_data = json.load(f)
                 except json.JSONDecodeError:
@@ -126,22 +216,14 @@ def handle_update(payload):
         if not feature_exists:
             features_data["features"].append({
                 "name": feature_name,
-                "installed": True
+                "version": update_version
             })
-            with open(json_path, "w") as f:
-                json.dump(features_data, f, indent=2)
-
+            atomic_json_write_safe(features_data,installed_features_json_path)
             print(f"Added feature '{feature_name}' to installed_features.json.")
+            publish_status("Update done", "container updated successfully Version" + update_version)
 
-            try:
-                with open(manifest_path, "w") as f:
-                    json.dump(manifest, f, indent=2)
-            except Exception as e:
-                publish_status("error", f"Failed to write manifest: {e}")
-                return
-            
-            publish_status("done", "Manifest updated successfully Version 1.0")
     elif update_target == "ECU":
+        json_dir = os.path.join(SCRIPT_DIR, "json")
         ecu_data = payload.get("ECU_meta_data", {})
         segmented = bool(ecu_data.get("segmented"))
         target_ecu = int(ecu_data.get("target_ecu"))
@@ -160,12 +242,24 @@ def handle_update(payload):
                 prev_segment_no = curr_segment_no
                 curr_segment_no = int(ecu_data.get("segment_no"))
             assemble_payload(ecu_compressed_payload)
-            update_ecu(target_ecu, client)
-            publish_status("done", "ECU update segment recieved")
+            if curr_segment_no == total_segments - 1:
+                try:
+                    update_ecu(target_ecu, client)
+                except Exception as e:
+                    publish_status("Update failed", "ECU update failed")
+                else:
+                    commit_app_update_version(target_ecu,update_version)
+                    publish_status("Update done", "ECU update segment recieved")
         elif segmented is False:
             prepare_payload(ecu_compressed_payload)
-            update_ecu(target_ecu, client)
-            publish_status("done", "ECU update relayed to UDS")
+            try:
+                update_ecu(target_ecu, client)
+            except Exception as e:
+                publish_status("Update failed", "ECU update failed")
+            else:
+                commit_app_update_version(target_ecu,update_version)
+                publish_status("Update done", "ECU update segment recieved")
+            publish_status("Update done", "ECU update relayed to UDS")
         return
 
 def update_ecu(target_ecu, MQTTClient):
@@ -311,6 +405,7 @@ def on_connect(client, userdata, flags, rc):
         print("Connected to AWS IoT Core.")
         client.subscribe([(UPDATE_TOPIC, 1), (MARKETPLACE_SUBSCRIBE_TOPIC, 1)])
         print(f"Subscribed to topics: {UPDATE_TOPIC}, {MARKETPLACE_SUBSCRIBE_TOPIC}")
+        notify_cloud_onboot()
     else:
         print(f"Connection failed with code {rc}")
 
