@@ -130,7 +130,7 @@ class UDSClient:
                         logger.info(f"Routine control failed")
                         return response
                     time.sleep(0.005)
-                    response = client.get_routine_result(routine_id)
+                    response = client.get_routine_result(routine_id, data)
                     logger.info(f"return message to routine control: {response}")
                     logger.info(f"response data: {response.data}")
                     
