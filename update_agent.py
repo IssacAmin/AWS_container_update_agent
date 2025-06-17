@@ -106,17 +106,20 @@ def commit_app_update_version(target, version):
                 print("Warning: Failed to decode JSON, starting fresh.")
 
         # Add new feature if not already installed
-        feature_exists = any(feature["name"] == target for feature in applications_data["applications"])
-        if not feature_exists:
-            applications_data["features"].append({
-                "name": target,
-                "version": version
-            })
+        app_exists = any(app["name"] == target for app in applications_data["applications"])
+        if not app_exists:
+            print("App name not found in JSON")
+            return 
+        else:
+            for app in applications_data["applications"]:
+                if app["name"] == target:
+                    app["version"] = version
+                    break
             atomic_json_write_safe(applications_data,ecu_applications_json_path)
             print(f"updated '{target}' version in ecu_applications.json.")
     
     payload = {
-    "update_target": "hmi",
+    "update_target": "ECU",
     "name": target,
     "version": version
     }
@@ -227,11 +230,26 @@ def handle_update(payload):
             atomic_json_write_safe(features_data,installed_features_json_path)
             print(f"Added feature '{feature_name}' to installed_features.json.")
             payload = {
-                "update_target": "hmi",
+                "update_target": "HMI",
                 "name": feature_name,
                 "version": update_version
             }
             client.publish(UPDATE_DB_TOPIC,json.dumps(payload))
+        else:
+            for feature in features_data["features"]:
+                if feature["name"] == feature_name:
+                    feature["version"] = update_version
+                    break
+            atomic_json_write_safe(features_data,installed_features_json_path)
+            print(f"updated '{feature_name}' version in ecu_applications.json.")
+            payload = {
+                "update_target": "HMI",
+                "name": feature_name,
+                "version": update_version
+            }
+            client.publish(UPDATE_DB_TOPIC,json.dumps(payload))
+        return
+
 
     elif update_target == "ECU":
         json_dir = os.path.join(SCRIPT_DIR, "json")
@@ -260,7 +278,7 @@ def handle_update(payload):
                 except Exception as e:
                     publish_status("Update failed", "ECU update failed")
                 else:
-                    commit_app_update_version(target_ecu,update_version)
+                    commit_app_update_version(target_ecu, update_version)
                     publish_status("Update done", "ECU update segment recieved")
         elif segmented is False:
             prepare_payload(ecu_compressed_payload)
