@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def send_update(MQTTClient, target: int, update: bytes):
+def send_update(MQTTClient, target, update: bytes):
     if not isinstance(update, bytes):
         logger.error("Update data must be of type bytes")
         return

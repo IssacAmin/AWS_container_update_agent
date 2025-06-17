@@ -173,7 +173,6 @@ def handle_update(payload):
     global segments
     
     update_target = payload.get("update_target")
-    update_version = -1
     if not update_target:
         print("error update target wrong")
         publish_status("Update failed", "Missing 'update_target'")
@@ -238,7 +237,8 @@ def handle_update(payload):
         json_dir = os.path.join(SCRIPT_DIR, "json")
         ecu_data = payload.get("ECU_meta_data", {})
         segmented = bool(ecu_data.get("segmented"))
-        target_ecu = int(ecu_data.get("target_ecu"))
+        target_ecu = ecu_data.get("target_ecu")
+        update_version = ecu_data.get("version")
         if ecu_update_id == "":
             ecu_update_id = ecu_data.get("id")
             ecu_curr_update_id = ecu_data.get("id")
