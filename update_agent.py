@@ -411,11 +411,14 @@ def watch_request_file_and_publish():
 
 
 # === MQTT CALLBACKS ===
+subscribed = False
 
 def on_connect(client, userdata, flags, rc):
-    if rc == 0:
+    global subscribed 
+    if rc == 0 and not subscribed:
         print("Connected to AWS IoT Core.")
         client.subscribe([(UPDATE_TOPIC, 1), (MARKETPLACE_SUBSCRIBE_TOPIC, 1)])
+        subscribed = True
         print(f"Subscribed to topics: {UPDATE_TOPIC}, {MARKETPLACE_SUBSCRIBE_TOPIC}")
         notify_cloud_onboot()
     else:
