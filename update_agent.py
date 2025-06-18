@@ -12,6 +12,9 @@ import hashlib
 import tempfile
 import fcntl
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.hazmat.backends import default_backend
 
 
 # === GLOBAL VARIABLES === #
@@ -38,7 +41,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CERT_FILE = os.path.join(SCRIPT_DIR, "certs", "device.crt")
 KEY_FILE = os.path.join(SCRIPT_DIR, "certs", "device.key")
 CA_CERT = os.path.join(SCRIPT_DIR, "certs", "AmazonRootCA1.pem")
-
+PRIVATE_KEY_FILE = os.path.join(SCRIPT_DIR, "certs", "private_key.pem")
 # === MQTT TOPICS === #
 UPDATE_TOPIC = f"update/{DEVICE_ID}"
 MARKETPLACE_PUBLISH_TOPIC = f"marketplace_requests/{DEVICE_ID}"
@@ -379,10 +382,31 @@ def handle_update(payload):
         elif segmented is False:
             prepare_payload(ecu_compressed_payload)          
             publish_status("Update done", "ECU update relayed to UDS")
-            #delta_file_ready = True
+                #delta_file_ready = True
+                #ecu_name = target_ecu
+                #ecu_version = update_version
             print("***********FLASH SEQUENCE DONE***********")
             publish_status("Update done", "ECU update recieved")
         return
+
+def signDeltaFile(deltaFileBytes):
+    # Load the private key from file
+    with open(PRIVATE_KEY_FILE, "rb") as key_file:
+        private_key = serialization.load_pem_private_key(
+            key_file.read(),
+            password=None,
+            backend=default_backend
+        )
+
+    # Sign the data
+    signature = private_key.sign(
+        deltaFileBytes,
+        ec.ECDSA(hashes.SHA256())
+    )
+
+    return signature
+
+
 
 def update_ecu(MQTTClient):
     global delta_file_ready
@@ -391,12 +415,15 @@ def update_ecu(MQTTClient):
     global ecu_version
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
+    
+    signature = signDeltaFile(delta_bytes)
+    complete_payload = delta_bytes + signature
     while(not(delta_file_ready and user_accepted_update and ecu_name != "" and ecu_version != "" )):
         time.sleep(1)
     delta_file_ready = False
     user_accepted_update = False
     try:
-        send_update(MQTTClient, ecu_name, delta_bytes)
+        send_update(MQTTClient, ecu_name, complete_payload)
         print("***********FLASH SEQUENCE DONE***********")
     except Exception as e:
         publish_status("Update failed", "ECU update failed")
