@@ -11,6 +11,7 @@ from flashing_script import  send_update
 import hashlib
 import tempfile
 import fcntl
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 
 # === GLOBAL VARIABLES === #
@@ -21,6 +22,11 @@ prev_segment_no = -1
 first_segment = True
 total_segments = -1
 full_payload = ""
+server_get_req_signal = False
+delta_file_ready = False
+user_accepted_update = False
+ecu_name = ""
+ecu_version = ""
 # === CONFIGURATION === #
 
 DEVICE_ID = "jetson-nano-devkit"
@@ -41,9 +47,65 @@ REQUESTS_TOPIC = f"requests/{DEVICE_ID}"
 STATUS_TOPIC = f"status/{DEVICE_ID}"
 ONBOOT_TOPIC = f"on-boot/{DEVICE_ID}"
 UPDATE_DB_TOPIC = f"update-db/{DEVICE_ID}"
-FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "requests.json")
-MARKETPLACE_FILE_TO_WATCH = os.path.join(SCRIPT_DIR, "json", "marketplace_requests.json")
-POLL_INTERVAL = 1  # seconds
+
+
+# ===CONSTANTS=== #
+SERVER_INTERNAL_PORT = 8080
+
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        content_length = int(self.headers.get('Content-Length', 0))
+        body = self.rfile.read(content_length).decode()
+        print(f"Received POST data: {body}")
+        try:
+            req = json.loads(body)
+        except:
+            print("Wrong Http Request format, ignoring request...")
+            self.send_response(400)
+            return 
+        client.publish(REQUESTS_TOPIC, json.dumps(req))
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Signal received")
+
+    def do_GET(self):
+        global user_accepted_update
+        if self.path == "/marketplace":
+            json_dir = os.path.join(SCRIPT_DIR, "json")
+            installed_features_json_path = os.path.join(json_dir, "installed_features.json")
+
+            print("Received GET request: Requesting marketplace items")
+            msg = {
+            "message": "Requesting Marketplace items"
+            }
+            client.publish(MARKETPLACE_PUBLISH_TOPIC, json.dumps(msg))
+            global server_get_req_signal
+            while(not server_get_req_signal):
+                time.sleep(1)
+            server_get_req_signal = False
+            
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json')
+            self.end_headers()
+
+            marketplace_dir = os.path.join(SCRIPT_DIR, "json")
+            marketplace_path = os.path.join(marketplace_dir, "marketplace.json")
+            os.makedirs(marketplace_dir, exist_ok=True)
+
+            with open(marketplace_path, "r") as f:
+                try:
+                    data = json.load(f)
+                    annotated_data = annotate_marketplace_with_installed(data,installed_features_json_path)
+                    self.wfile.write(json.dumps(annotated_data).encode('utf-8'))
+                except json.JSONDecodeError:
+                    print("Warning: Failed to decode JSON")
+        elif self.path == "/update":
+            print("recieved a start update request from GUI")
+            user_accepted_update = True
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b"ok")
 
 
 # === MQTT SETUP === #
@@ -61,6 +123,29 @@ client.tls_insecure_set(False)
 
 
 # === FUNCTIONALITY === #
+
+def annotate_marketplace_with_installed(marketplace_data, installed_file_path):
+    try:
+        with open(installed_file_path, "r") as f:
+            installed_data = json.load(f)
+    except Exception as e:
+        print(f"Failed to read installed features: {e}")
+        installed_data = {}
+
+    # Build a lookup set of installed feature IDs
+    installed_ids = set()
+    for feature in installed_data.get("features", []):
+        if feature.get("installed") == True:
+            installed_ids.add(feature.get("id"))
+
+    # Annotate marketplace items
+    for item in marketplace_data.get("marketplace", []):
+        item_id = item.get("id")
+        item["installed"] = item_id in installed_ids
+
+    return marketplace_data
+
+
 def notify_cloud_onboot():
     json_dir = os.path.join(SCRIPT_DIR, "json")
     installed_features_json_path = os.path.join(json_dir, "installed_features.json")
@@ -89,8 +174,13 @@ def notify_cloud_onboot():
         "features": features_data["features"]
     }
     
-    print(payload)
+    print(f"startup notification: {payload}")
     client.publish(ONBOOT_TOPIC, json.dumps(payload))    
+
+    msg = {
+        "message": "Requesting Marketplace items"
+    }
+    client.publish(MARKETPLACE_PUBLISH_TOPIC, json.dumps(msg))
     return
 
 def commit_app_update_version(target, version):
@@ -119,6 +209,7 @@ def commit_app_update_version(target, version):
             print(f"updated '{target}' version in ecu_applications.json.")
     
     payload = {
+    "car-id": DEVICE_ID,
     "update_target": "ECU",
     "name": target,
     "version": version
@@ -174,7 +265,10 @@ def handle_update(payload):
     global first_segment 
     global total_segments 
     global segments
-    
+    global delta_file_ready
+    global ecu_name
+    global ecu_version
+
     update_target = payload.get("update_target")
     if not update_target:
         print("error update target wrong")
@@ -185,14 +279,13 @@ def handle_update(payload):
         hmi_data = payload.get("HMI_meta_data", {})
         action = hmi_data.get("action")
         manifest = hmi_data.get("manifest")
+        container_id = manifest.get("container_id")
         feature_name = hmi_data.get("feature_name")
         update_version = hmi_data.get("container_version")
         if not action or not manifest:
             print("error action or manifest wrong")
             publish_status("Update failed", "Missing 'action' or 'manifest' in HMI_meta_data")
             return
-
-        container_id = manifest.get("container_id")
         if not container_id:
             publish_status("Update failed", "Manifest missing 'container_id'")
             return
@@ -225,12 +318,16 @@ def handle_update(payload):
         if not feature_exists:
             features_data["features"].append({
                 "name": feature_name,
-                "version": update_version
+                "version": update_version,
+                "id": container_id,
+                "installed": True
             })
             atomic_json_write_safe(features_data,installed_features_json_path)
             print(f"Added feature '{feature_name}' to installed_features.json.")
             payload = {
                 "update_target": "HMI",
+                "car-id": DEVICE_ID,
+                "id": container_id,
                 "name": feature_name,
                 "version": update_version
             }
@@ -273,30 +370,42 @@ def handle_update(payload):
                 curr_segment_no = int(ecu_data.get("segment_no"))
             assemble_payload(ecu_compressed_payload)
             if curr_segment_no == total_segments - 1:
-                try:
-                    update_ecu(target_ecu, client)
-                except Exception as e:
-                    publish_status("Update failed", "ECU update failed")
-                else:
-                    commit_app_update_version(target_ecu, update_version)
-                    publish_status("Update done", "ECU update segment recieved")
+                publish_status("Update done", "ECU update relayed to UDS")
+                #delta_file_ready = True
+                #ecu_name = target_ecu
+                #ecu_version = update_version
+                print("***********FLASH SEQUENCE DONE***********")
+                publish_status("Update done", "ECU update recieved")
         elif segmented is False:
-            prepare_payload(ecu_compressed_payload)
-            try:
-                update_ecu(target_ecu, client)
-            except Exception as e:
-                publish_status("Update failed", "ECU update failed")
-            else:
-                commit_app_update_version(target_ecu,update_version)
-                publish_status("Update done", "ECU update segment recieved")
+            prepare_payload(ecu_compressed_payload)          
             publish_status("Update done", "ECU update relayed to UDS")
+            #delta_file_ready = True
+            print("***********FLASH SEQUENCE DONE***********")
+            publish_status("Update done", "ECU update recieved")
         return
 
-def update_ecu(target_ecu, MQTTClient):
-    #Todo: call flashscript entry point
+def update_ecu(MQTTClient):
+    global delta_file_ready
+    global user_accepted_update
+    global ecu_name
+    global ecu_version
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
-    send_update(MQTTClient, target_ecu, delta_bytes)
+    while(not(delta_file_ready and user_accepted_update and ecu_name != "" and ecu_version != "" )):
+        time.sleep(1)
+    delta_file_ready = False
+    user_accepted_update = False
+    try:
+        send_update(MQTTClient, ecu_name, delta_bytes)
+        print("***********FLASH SEQUENCE DONE***********")
+    except Exception as e:
+        publish_status("Update failed", "ECU update failed")
+    else:
+        commit_app_update_version(ecu_name, ecu_version)
+        publish_status("Update done", "ECU update segment recieved")
+
+    ecu_name = ""
+    ecu_version = ""
     return
 
 def assemble_payload(compressed_payload):
@@ -360,72 +469,15 @@ def handle_marketplace_payload(payload):
         try:
             with open(marketplace_path, "w") as f:
                 json.dump(payload, f, indent=2)
+            
+            #send the new data to the gui over the 8080 port
+            #signal the server to respond
+            global server_get_req_signal
+            server_get_req_signal = True
         except Exception as e:
             publish_status("error", f"Failed to write marketplace items")
             return
         publish_status("done", "Marketplace successfully fetched")
-
-
-
-
-def hash_file_content(filepath):
-    with open(filepath, 'rb') as f:
-        return hashlib.md5(f.read()).hexdigest()
-
-def watch_marketplace_file_and_publish():
-    print(f"Watching file: {MARKETPLACE_FILE_TO_WATCH}")
-    last_hash = hash_file_content(MARKETPLACE_FILE_TO_WATCH)
-
-    while True:
-        try:
-            if os.path.exists(MARKETPLACE_FILE_TO_WATCH):
-                current_hash = hash_file_content(MARKETPLACE_FILE_TO_WATCH)
-                if current_hash != last_hash:
-                    last_hash = current_hash
-                    msg = {
-                        "message": "Requesting Marketplace items"
-                    }
-                    client.publish(MARKETPLACE_PUBLISH_TOPIC, json.dumps(msg))
-
-
-                    # Reset hash to avoid re-publish due to our own write
-                    last_hash = hash_file_content(MARKETPLACE_FILE_TO_WATCH)
-
-        except Exception as e:
-            print(f"Error watching file: {e}")
-            publish_status("error", f"File watch error: {e}")
-        time.sleep(POLL_INTERVAL)
-
-def watch_request_file_and_publish():
-    print(f"Watching file: {FILE_TO_WATCH}")
-    last_hash = hash_file_content(FILE_TO_WATCH)
-
-    while True:
-        try:
-            if os.path.exists(FILE_TO_WATCH):
-                current_hash = hash_file_content(FILE_TO_WATCH)
-                if current_hash != last_hash:
-                    last_hash = current_hash
-                    print("ana f el request hena ahoo")
-                    with open(FILE_TO_WATCH, "r") as f:
-                        features = json.load(f)
-
-                    if isinstance(features, list) and features:
-                        print(f"Publishing {len(features)} feature(s): {features}")
-                        client.publish(REQUESTS_TOPIC, json.dumps(features))
-                        publish_status("info", f"Published {len(features)} feature(s).")
-
-                        # Clear list after publishing
-                        with open(FILE_TO_WATCH, "w") as f:
-                            json.dump([], f, indent=2)
-                        
-                        #Reset hash to avoid re-publish due to our own write
-                        last_hash = hash_file_content(FILE_TO_WATCH)
-
-        except Exception as e:
-            print(f"Error watching file: {e}")
-            publish_status("error", f"File watch error: {e}")
-        time.sleep(POLL_INTERVAL)
 
 
 # === MQTT CALLBACKS ===
@@ -465,6 +517,11 @@ def on_disconnect(client, userdata, rc):
     if rc != 0:
         print("Unexpected disconnection. Trying to reconnect...")
 
+def start_http_server():
+    server = HTTPServer(('0.0.0.0', SERVER_INTERNAL_PORT), SimpleHandler)
+    print(f"[HTTP] Listening on port {SERVER_INTERNAL_PORT}...")
+    server.serve_forever()
+
 
 # === MAIN ===
 
@@ -476,13 +533,15 @@ client.on_disconnect = on_disconnect
 client.connect(AWS_IOT_ENDPOINT, MQTT_PORT)
 client.loop_start()  # Use non-blocking loop
 
-# Start file watch in background thread
-threading.Thread(target=watch_request_file_and_publish, daemon=True).start()
-threading.Thread(target=watch_marketplace_file_and_publish, daemon=True).start()
+# Start HTTP server in its own thread
+http_thread = threading.Thread(target=start_http_server, daemon=True)
+http_thread.start()
+
+update_thread = threading.Thread(target=update_ecu, args=(client,), daemon=True)
+update_thread.start()
 
 # Keep main thread alive
 try:
-    # update_ecu(target_ecu = 0, MQTTClient = client)
     while True:
         time.sleep(1)
 except KeyboardInterrupt:
