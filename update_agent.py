@@ -26,7 +26,6 @@ total_segments = -1
 full_payload = ""
 server_get_req_signal = False
 delta_file_ready = False
-user_accepted_update = False
 ecu_name = ""
 ecu_version = ""
 # === CONFIGURATION === #
@@ -74,7 +73,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
         self.wfile.write(b"Signal received")
 
     def do_GET(self):
-        global user_accepted_update
+        global update_thread
         if self.path == "/marketplace":
             json_dir = os.path.join(SCRIPT_DIR, "json")
             installed_features_json_path = os.path.join(json_dir, "installed_features.json")
@@ -106,7 +105,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
                     print("Warning: Failed to decode JSON")
         elif self.path == "/update":
             print("recieved a start update request from GUI")
-            user_accepted_update = True
+            update_thread.start()
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
@@ -405,20 +404,20 @@ def sign_delta_file(data_bytes):
 
 def update_ecu(MQTTClient):
     global delta_file_ready
-    global user_accepted_update
     global ecu_name
     global ecu_version
+
+    while(not(delta_file_ready and  ecu_name != "" and ecu_version != "" )):
+        #print(f"file ready: {delta_file_ready}, user accepted: {user_accepted_update}, ecu name: {ecu_name}, ecu version: {ecu_version}")
+        #print("waiting for signal")
+        time.sleep(1)
+    delta_file_ready = False
+
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
     
     signature = sign_delta_file(delta_bytes)
     complete_payload = delta_bytes + signature
-    while(not(delta_file_ready and user_accepted_update and ecu_name != "" and ecu_version != "" )):
-        #print(f"file ready: {delta_file_ready}, user accepted: {user_accepted_update}, ecu name: {ecu_name}, ecu version: {ecu_version}")
-        #print("waiting for signal")
-        time.sleep(1)
-    delta_file_ready = False
-    user_accepted_update = False
     try:
         #send_update(MQTTClient, ecu_name, complete_payload)
         print("***********FLASH SEQUENCE DONE***********")
@@ -562,7 +561,7 @@ http_thread = threading.Thread(target=start_http_server, daemon=True)
 http_thread.start()
 
 update_thread = threading.Thread(target=update_ecu, args=(client,), daemon=True)
-update_thread.start()
+
 
 # Keep main thread alive
 try:
