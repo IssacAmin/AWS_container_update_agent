@@ -14,6 +14,10 @@ import fcntl
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from ecdsa import SigningKey, NIST256p
 import hashlib
+from ecdsa.util import sigencode_der
+
+
+
 
 
 # === GLOBAL VARIABLES === #
@@ -395,8 +399,7 @@ def sign_delta_file(data_bytes):
         sk = SigningKey.from_pem(f.read())  # Load EC private key
 
     # Sign the data (hashing internally with SHA-256)
-    signature = sk.sign(data_bytes, hashfunc=hashlib.sha256)
-
+    signature = sk.sign(data_bytes, hashfunc=hashlib.sha256, sigencode=sigencode_der)
     return signature
 
 
@@ -415,9 +418,8 @@ def update_ecu(MQTTClient):
         delta_bytes = f.read()
     
     signature = sign_delta_file(delta_bytes)
-    complete_payload = delta_bytes + signature
     try:
-        #send_update(MQTTClient, ecu_name, complete_payload)
+        send_update(MQTTClient, ecu_name, delta_bytes, signature)
         print("***********FLASH SEQUENCE DONE***********")
     except Exception as e:
         publish_status("Update failed", "ECU update failed")
