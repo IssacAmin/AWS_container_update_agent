@@ -1,3 +1,4 @@
+from numpy import sign
 import udsoncan.ResponseCode
 from uds_client import UDSClient, publish_status
 import logging
@@ -7,7 +8,7 @@ logger = logging.getLogger(__name__)
 
 
 
-def send_update(MQTTClient, target, update: bytes):
+def send_update(MQTTClient, target, update: bytes, signature: bytes = None):
     if not isinstance(update, bytes):
         logger.error("Update data must be of type bytes")
         return
@@ -26,7 +27,11 @@ def send_update(MQTTClient, target, update: bytes):
             ins_size = 7
         else:
             raise Exception(f"Unknown instruction type: {update[i]}")
-        update_segments.append(update[i:i+ins_size])
+        if update[i] == 0x11 and signature is not None:
+            update_segments.append(update[i:i+ins_size] + signature)
+        else:
+            update_segments.append(update[i:i+ins_size])
+        
         i += ins_size
         
 
