@@ -400,8 +400,6 @@ def sign_delta_file(data_bytes):
     return signature
 
 
-
-
 def update_ecu(MQTTClient):
     global delta_file_ready
     global ecu_name
@@ -417,19 +415,9 @@ def update_ecu(MQTTClient):
         delta_bytes = f.read()
     
     signature = sign_delta_file(delta_bytes)
-<<<<<<< HEAD
     complete_payload = delta_bytes + signature
-=======
-    complete_payload = delta_bytes
-    while(not(delta_file_ready and user_accepted_update and ecu_name != "" and ecu_version != "" )):
-        #print(f"file ready: {delta_file_ready}, user accepted: {user_accepted_update}, ecu name: {ecu_name}, ecu version: {ecu_version}")
-        #print("waiting for signal")
-        time.sleep(1)
-    delta_file_ready = False
-    user_accepted_update = False
->>>>>>> e0fecc9a47c193b4bf870c747bfc2b0b648695db
     try:
-        #send_update(MQTTClient, ecu_name, complete_payload, signature)
+        #send_update(MQTTClient, ecu_name, complete_payload)
         print("***********FLASH SEQUENCE DONE***********")
     except Exception as e:
         publish_status("Update failed", "ECU update failed")
