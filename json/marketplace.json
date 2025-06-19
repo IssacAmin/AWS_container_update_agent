@@ -14,7 +14,7 @@
     },
     {
       "name": "Very New Feature",
-      "price": "$99999",
+      "price": "$99",
       "id": "69e9737e-66cc-4576-9152-7eb5aeb2556f",
       "container_id": "marketplace-new-feature-manifest"
     }

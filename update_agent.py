@@ -32,6 +32,7 @@ server_get_req_signal = False
 delta_file_ready = False
 ecu_name = ""
 ecu_version = ""
+
 # === CONFIGURATION === #
 
 DEVICE_ID = "jetson-nano-devkit"
@@ -113,6 +114,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
             self.end_headers()
+
             self.wfile.write(b"ok")
 
 
@@ -380,7 +382,6 @@ def handle_update(payload):
                 curr_segment_no = int(ecu_data.get("segment_no"))
             assemble_payload(ecu_compressed_payload)
             if curr_segment_no == total_segments - 1:
-                publish_status("Update done", "ECU update relayed to UDS")
                 delta_file_ready = True
                 ecu_name = target_ecu
                 ecu_version = update_version
@@ -407,11 +408,11 @@ def update_ecu(MQTTClient):
     global delta_file_ready
     global ecu_name
     global ecu_version
-
-    while(not(delta_file_ready and  ecu_name != "" and ecu_version != "" )):
-        #print(f"file ready: {delta_file_ready}, user accepted: {user_accepted_update}, ecu name: {ecu_name}, ecu version: {ecu_version}")
-        #print("waiting for signal")
-        time.sleep(1)
+    global waiting_for_update_response
+    if(not(delta_file_ready and  ecu_name != "" and ecu_version != "" )):
+        print("No Update is Ready")
+        #end thread
+        return
     delta_file_ready = False
 
     with open("deltafile.hex","rb") as f:
@@ -419,7 +420,7 @@ def update_ecu(MQTTClient):
     
     signature = sign_delta_file(delta_bytes)
     try:
-        send_update(MQTTClient, ecu_name, delta_bytes, signature)
+        #send_update(MQTTClient, ecu_name, delta_bytes, signature)
         print("***********FLASH SEQUENCE DONE***********")
     except Exception as e:
         publish_status("Update failed", "ECU update failed")
