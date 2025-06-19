@@ -1,12 +1,6 @@
 {
   "marketplace": [
     {
-      "name": "ADAS",
-      "price": "$99",
-      "id": "72717ce8-d902-420b-b2a0-a73b44d9a0aa",
-      "container_id": "aws-update-agent"
-    },
-    {
       "name": "Lane Keep Assist",
       "price": "$99",
       "id": "65a00451-c777-4e1b-833e-51d9fdfb3a8a",

@@ -392,7 +392,7 @@ def handle_update(payload):
         return
 
 def sign_delta_file(data_bytes):
-    with open("private_key.pem", "rb") as f:
+    with open(PRIVATE_KEY_FILE, "rb") as f:
         sk = SigningKey.from_pem(f.read())  # Load EC private key
 
     # Sign the data (hashing internally with SHA-256)
@@ -411,8 +411,8 @@ def update_ecu(MQTTClient):
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
     
-    #signature = sign_delta_file(delta_bytes)
-    #complete_payload = delta_bytes + signature
+    signature = sign_delta_file(delta_bytes)
+    complete_payload = delta_bytes + signature
     while(not(delta_file_ready and user_accepted_update and ecu_name != "" and ecu_version != "" )):
         #print(f"file ready: {delta_file_ready}, user accepted: {user_accepted_update}, ecu name: {ecu_name}, ecu version: {ecu_version}")
         #print("waiting for signal")
