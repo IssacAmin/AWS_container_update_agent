@@ -1,9 +1,28 @@
 {
   "marketplace": [
     {
-      "name": "Highway Pilot Mode",
+      "name": "ADAS",
       "price": "$99",
-      "id": "72717ce8-d902-420b-b2a0-a73b44d9a0aa"
+      "id": "72717ce8-d902-420b-b2a0-a73b44d9a0aa",
+      "container_id": "aws-update-agent"
+    },
+    {
+      "name": "Lane Keep Assist",
+      "price": "$99",
+      "id": "65a00451-c777-4e1b-833e-51d9fdfb3a8a",
+      "container_id": "marketplace-aws-update2"
+    },
+    {
+      "name": "Lane Keep Assist",
+      "price": "$100",
+      "id": "000e75c5-dd65-4182-987e-d9b9331a2b80",
+      "container_id": "marketplace-aws-update"
+    },
+    {
+      "name": "Very New Feature",
+      "price": "$99999",
+      "id": "69e9737e-66cc-4576-9152-7eb5aeb2556f",
+      "container_id": "marketplace-new-feature-manifest"
     }
   ]
 }

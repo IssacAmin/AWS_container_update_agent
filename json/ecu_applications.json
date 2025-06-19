@@ -1,5 +1,1 @@
-{
-  "applications": [
-  {"name": "ecu_1", "version": "1.0"}
-  ]
-}
+{"applications": [{"id": "ecu1", "version": "1.0.1"}]}

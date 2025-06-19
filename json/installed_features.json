@@ -1,14 +1,1 @@
-{
-  "features": [
-  {"name": "Graphical User Interface", "version": "1.0","id": "GUI", "installed": true}, 
-  {"name": "AWS Update Agent", "version": "1.0","id": "aws-update-agent", "installed": true},
-      {
-      "name": "Highway Pilot Mode",
-      "price": "$99",
-      "id": "72717ce8-d902-420b-b2a0-a73b44d9a0aa",
-      "installed": true
-    }
-  
-  ]
-}
-
+{"features": [{"name": "Graphical User Interface", "version": "1.0.0", "id": "GUI", "installed": true}, {"name": "AWS Update Agent", "version": "1.1.1", "id": "aws-update-agent", "installed": true}, {"name": "Very New Feature", "version": "1.0.0", "id": "marketplace-new-feature-manifest", "installed": true}]}

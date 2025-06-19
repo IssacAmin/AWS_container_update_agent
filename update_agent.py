@@ -12,9 +12,8 @@ import hashlib
 import tempfile
 import fcntl
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
-from cryptography.hazmat.backends import default_backend
+from ecdsa import SigningKey, NIST256p
+import hashlib
 
 
 # === GLOBAL VARIABLES === #
@@ -62,10 +61,13 @@ class SimpleHandler(BaseHTTPRequestHandler):
         print(f"Received POST data: {body}")
         try:
             req = json.loads(body)
+            print(f"gui feature request: {req}")
+            req["car_id"] = DEVICE_ID
         except:
             print("Wrong Http Request format, ignoring request...")
             self.send_response(400)
             return 
+        print(f"Sent feature request: {req}")
         client.publish(REQUESTS_TOPIC, json.dumps(req))
         self.send_response(200)
         self.end_headers()
@@ -79,12 +81,13 @@ class SimpleHandler(BaseHTTPRequestHandler):
 
             print("Received GET request: Requesting marketplace items")
             msg = {
+            "car_id": DEVICE_ID,
             "message": "Requesting Marketplace items"
             }
             client.publish(MARKETPLACE_PUBLISH_TOPIC, json.dumps(msg))
             global server_get_req_signal
             while(not server_get_req_signal):
-                time.sleep(1)
+                pass
             server_get_req_signal = False
             
             self.send_response(200)
@@ -94,7 +97,6 @@ class SimpleHandler(BaseHTTPRequestHandler):
             marketplace_dir = os.path.join(SCRIPT_DIR, "json")
             marketplace_path = os.path.join(marketplace_dir, "marketplace.json")
             os.makedirs(marketplace_dir, exist_ok=True)
-
             with open(marketplace_path, "r") as f:
                 try:
                     data = json.load(f)
@@ -134,18 +136,18 @@ def annotate_marketplace_with_installed(marketplace_data, installed_file_path):
     except Exception as e:
         print(f"Failed to read installed features: {e}")
         installed_data = {}
-
+    
     # Build a lookup set of installed feature IDs
     installed_ids = set()
     for feature in installed_data.get("features", []):
         if feature.get("installed") == True:
             installed_ids.add(feature.get("id"))
-
+    print(installed_ids)
     # Annotate marketplace items
     for item in marketplace_data.get("marketplace", []):
-        item_id = item.get("id")
+        item_id = item.get("container_id")
         item["installed"] = item_id in installed_ids
-
+    print(f"merged data: {marketplace_data}")
     return marketplace_data
 
 
@@ -172,7 +174,7 @@ def notify_cloud_onboot():
                 print("Warning: Failed to decode JSON, starting fresh.")
     
     payload = {
-        "id": DEVICE_ID,
+        "car_id": DEVICE_ID,
         "applications": applications_data["applications"],
         "features": features_data["features"]
     }
@@ -199,48 +201,48 @@ def commit_app_update_version(target, version):
                 print("Warning: Failed to decode JSON, starting fresh.")
 
         # Add new feature if not already installed
-        app_exists = any(app["name"] == target for app in applications_data["applications"])
+        app_exists = any(app["id"] == target for app in applications_data["applications"])
         if not app_exists:
             print("App name not found in JSON")
             return 
         else:
             for app in applications_data["applications"]:
-                if app["name"] == target:
+                if app["id"] == target:
                     app["version"] = version
                     break
             atomic_json_write_safe(applications_data,ecu_applications_json_path)
             print(f"updated '{target}' version in ecu_applications.json.")
     
     payload = {
-    "car-id": DEVICE_ID,
+    "car_id": DEVICE_ID,
     "update_target": "ECU",
-    "name": target,
+    "id": target,
     "version": version
     }
     client.publish(UPDATE_DB_TOPIC,json.dumps(payload))
     return
 
+
+
 def atomic_json_write_safe(data, filename):
     lockfile_path = filename + ".lock"
-    dirname = os.path.dirname(filename)
+    dirname = os.path.dirname(filename) or "."
 
     with open(lockfile_path, "w") as lockfile:
-        # Acquire lock to prevent concurrent writes
-        fcntl.flock(lockfile, fcntl.LOCK_EX)
+        fcntl.flock(lockfile, fcntl.LOCK_EX)  # Only blocks other writers
 
         try:
-            # Write to temp file
             with tempfile.NamedTemporaryFile("w", dir=dirname, delete=False) as tmpfile:
                 json.dump(data, tmpfile)
                 tmpfile.flush()
                 os.fsync(tmpfile.fileno())
                 temp_name = tmpfile.name
 
-            # Atomically replace the original file
-            os.replace(temp_name, filename)
+            os.replace(temp_name, filename)  # Atomic swap
 
         finally:
             fcntl.flock(lockfile, fcntl.LOCK_UN)
+
 
 def run_command(cmd):
     print(f"Running: {cmd}")
@@ -280,14 +282,14 @@ def handle_update(payload):
 
     if update_target == "HMI":
         hmi_data = payload.get("HMI_meta_data", {})
-        action = hmi_data.get("action")
+
         manifest = hmi_data.get("manifest")
         container_id = manifest.get("container_id")
         feature_name = hmi_data.get("feature_name")
-        update_version = hmi_data.get("container_version")
-        if not action or not manifest:
-            print("error action or manifest wrong")
-            publish_status("Update failed", "Missing 'action' or 'manifest' in HMI_meta_data")
+        update_version = hmi_data.get("version")
+        if not manifest:
+            print("error manifest wrong")
+            publish_status("Update failed", "Missing 'manifest' in HMI_meta_data")
             return
         if not container_id:
             publish_status("Update failed", "Manifest missing 'container_id'")
@@ -317,7 +319,7 @@ def handle_update(payload):
                     print("Warning: Failed to decode JSON, starting fresh.")
 
         # Add new feature if not already installed
-        feature_exists = any(feature["name"] == feature_name for feature in features_data["features"])
+        feature_exists = any(feature["id"] == container_id for feature in features_data["features"])
         if not feature_exists:
             features_data["features"].append({
                 "name": feature_name,
@@ -326,10 +328,10 @@ def handle_update(payload):
                 "installed": True
             })
             atomic_json_write_safe(features_data,installed_features_json_path)
-            print(f"Added feature '{feature_name}' to installed_features.json.")
+            print(f"Added feature '{container_id}' to installed_features.json.")
             payload = {
                 "update_target": "HMI",
-                "car-id": DEVICE_ID,
+                "car_id": DEVICE_ID,
                 "id": container_id,
                 "name": feature_name,
                 "version": update_version
@@ -337,13 +339,15 @@ def handle_update(payload):
             client.publish(UPDATE_DB_TOPIC,json.dumps(payload))
         else:
             for feature in features_data["features"]:
-                if feature["name"] == feature_name:
+                if feature["id"] == container_id:
                     feature["version"] = update_version
                     break
             atomic_json_write_safe(features_data,installed_features_json_path)
-            print(f"updated '{feature_name}' version in ecu_applications.json.")
+            print(f"updated '{container_id}' version in installed_features.json.")
             payload = {
                 "update_target": "HMI",
+                "car_id": DEVICE_ID,
+                "id": container_id,
                 "name": feature_name,
                 "version": update_version
             }
@@ -374,37 +378,28 @@ def handle_update(payload):
             assemble_payload(ecu_compressed_payload)
             if curr_segment_no == total_segments - 1:
                 publish_status("Update done", "ECU update relayed to UDS")
-                #delta_file_ready = True
-                #ecu_name = target_ecu
-                #ecu_version = update_version
-                print("***********FLASH SEQUENCE DONE***********")
+                delta_file_ready = True
+                ecu_name = target_ecu
+                ecu_version = update_version
                 publish_status("Update done", "ECU update recieved")
         elif segmented is False:
             prepare_payload(ecu_compressed_payload)          
             publish_status("Update done", "ECU update relayed to UDS")
-                #delta_file_ready = True
-                #ecu_name = target_ecu
-                #ecu_version = update_version
-            print("***********FLASH SEQUENCE DONE***********")
+            delta_file_ready = True
+            ecu_name = target_ecu
+            ecu_version = update_version
             publish_status("Update done", "ECU update recieved")
         return
 
-def signDeltaFile(deltaFileBytes):
-    # Load the private key from file
-    with open(PRIVATE_KEY_FILE, "rb") as key_file:
-        private_key = serialization.load_pem_private_key(
-            key_file.read(),
-            password=None,
-            backend=default_backend
-        )
+def sign_delta_file(data_bytes):
+    with open("private_key.pem", "rb") as f:
+        sk = SigningKey.from_pem(f.read())  # Load EC private key
 
-    # Sign the data
-    signature = private_key.sign(
-        deltaFileBytes,
-        ec.ECDSA(hashes.SHA256())
-    )
+    # Sign the data (hashing internally with SHA-256)
+    signature = sk.sign(data_bytes, hashfunc=hashlib.sha256)
 
     return signature
+
 
 
 
@@ -416,14 +411,16 @@ def update_ecu(MQTTClient):
     with open("deltafile.hex","rb") as f:
         delta_bytes = f.read()
     
-    signature = signDeltaFile(delta_bytes)
-    complete_payload = delta_bytes + signature
+    #signature = sign_delta_file(delta_bytes)
+    #complete_payload = delta_bytes + signature
     while(not(delta_file_ready and user_accepted_update and ecu_name != "" and ecu_version != "" )):
+        #print(f"file ready: {delta_file_ready}, user accepted: {user_accepted_update}, ecu name: {ecu_name}, ecu version: {ecu_version}")
+        #print("waiting for signal")
         time.sleep(1)
     delta_file_ready = False
     user_accepted_update = False
     try:
-        send_update(MQTTClient, ecu_name, complete_payload)
+        #send_update(MQTTClient, ecu_name, complete_payload)
         print("***********FLASH SEQUENCE DONE***********")
     except Exception as e:
         publish_status("Update failed", "ECU update failed")
@@ -570,7 +567,7 @@ update_thread.start()
 # Keep main thread alive
 try:
     while True:
-        time.sleep(1)
+        pass
 except KeyboardInterrupt:
     print("Exiting...")
     client.disconnect()

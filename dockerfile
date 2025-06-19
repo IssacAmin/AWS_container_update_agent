@@ -14,7 +14,7 @@ COPY . .
 
 # Install Python dependencies directly
 RUN pip install python-can requests paho-mqtt udsoncan \
-    can can-isotp 
+    can can-isotp ecdsa
 	
 # Make the update script executable
 RUN chmod +x update_agent.py
