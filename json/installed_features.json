@@ -1,1 +1,1 @@
-{"features": [{"name": "Graphical User Interface", "version": "1.0.0", "id": "GUI", "installed": true}, {"name": "AWS Update Agent", "version": "1.1.1", "id": "aws-update-agent", "installed": true}]}
+{"features": [{"name": "Graphical User Interface", "version": "1.0.0", "id": "GUI", "installed": true}, {"name": "AWS Update Agent", "version": "1.0.0", "id": "aws-update-agent", "installed": true}]}

@@ -15,7 +15,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from ecdsa import SigningKey, NIST256p
 import hashlib
 from ecdsa.util import sigencode_der
-
+from datetime import datetime
 
 
 
@@ -110,6 +110,7 @@ class SimpleHandler(BaseHTTPRequestHandler):
                     print("Warning: Failed to decode JSON")
         elif self.path == "/update":
             print("recieved a start update request from GUI")
+            update_thread = threading.Thread(target=update_ecu, args=(client,), daemon=True)
             update_thread.start()
             self.send_response(200)
             self.send_header('Content-type', 'text/plain')
@@ -420,12 +421,16 @@ def update_ecu(MQTTClient):
     
     signature = sign_delta_file(delta_bytes)
     try:
-        #send_update(MQTTClient, ecu_name, delta_bytes, signature)
-        print("***********FLASH SEQUENCE DONE***********")
+        from datetime import datetime
+        print("***********FLASH SEQUENCE Starting***********")
+        send_update(MQTTClient, ecu_name, delta_bytes, signature)
+
     except Exception as e:
         publish_status("Update failed", "ECU update failed")
     else:
         commit_app_update_version(ecu_name, ecu_version)
+        print("***********FLASH SEQUENCE DONE***********")
+        print(datetime.now().strftime("%H:%M:%S"))
         publish_status("Update done", "ECU update segment recieved")
 
     ecu_name = ""
@@ -452,11 +457,8 @@ def assemble_payload(compressed_payload):
         first_segment = False
 
         if(curr_segment_no == total_segments - 1):
-            print("extracted payload:  " + full_payload)
             compressed_bytes = base64.b64decode(full_payload)
-            print("compressed bytes:  " + str(compressed_bytes))
             decompressed_bytes = zlib.decompress(compressed_bytes)
-            print("decompressed bytes:  " + str(decompressed_bytes))
             with open("deltafile.hex","wb") as f:
                 f.write(decompressed_bytes)
             first_segment = True
@@ -520,6 +522,7 @@ def on_connect(client, userdata, flags, rc):
 
 
 def on_message(client, userdata, msg):
+    print(datetime.now().strftime("%H:%M:%S"))
     print(f"Received message on {msg.topic}")
     try:
         payload = json.loads(msg.payload.decode())
@@ -560,8 +563,6 @@ client.loop_start()  # Use non-blocking loop
 # Start HTTP server in its own thread
 http_thread = threading.Thread(target=start_http_server, daemon=True)
 http_thread.start()
-
-update_thread = threading.Thread(target=update_ecu, args=(client,), daemon=True)
 
 
 # Keep main thread alive

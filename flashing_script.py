@@ -27,7 +27,7 @@ def send_update(MQTTClient, target, update: bytes, signature: bytes = None):
             ins_size = 7
         else:
             raise Exception(f"Unknown instruction type: {update[i]}")
-        if update[i] == 0x11 and signature is not None:
+        if update[i] == 0x10 and signature is not None:
             update_segments.append(update[i:i+ins_size] + signature)
         else:
             update_segments.append(update[i:i+ins_size])
