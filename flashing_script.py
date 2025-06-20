@@ -104,11 +104,6 @@ def send_update(MQTTClient, target, update: bytes, signature: bytes = None):
         if not response.valid or not response.positive:
             raise Exception(f"Failed to reset ECU: {response.code_name}")
         
-        logger.info("Switching back to default session")
-        response = client.session_control(0x01)  # Default session
-        if not response.valid or not response.positive:
-            raise Exception(f"Failed to switch back to default session: {response.code_name}")
-        logger.info(f"Update sent to target {target}")
     except Exception as e:
         logger.error(f"An error occurred during the update process: {e}")
         raise Exception(f"{e}")

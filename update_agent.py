@@ -553,7 +553,7 @@ def start_http_server():
 
 # === MAIN ===
 
-print("version 1.5.8")
+print("version 1.5.9")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect
