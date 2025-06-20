@@ -111,7 +111,7 @@ def send_update(MQTTClient, target, update: bytes, signature: bytes = None):
         logger.info(f"Update sent to target {target}")
     except Exception as e:
         logger.error(f"An error occurred during the update process: {e}")
-        publish_status(MQTTClient, "done", "Exception happened somewhere in flashing script")
+        raise Exception(f"{e}")
     finally:
         logger.info("Shutting down client")
         client.shutdown()

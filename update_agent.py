@@ -421,7 +421,7 @@ def update_ecu(MQTTClient):
     
     signature = sign_delta_file(delta_bytes)
     try:
-        from datetime import datetime
+        print(datetime.now().strftime("%H:%M:%S"))
         print("***********FLASH SEQUENCE Starting***********")
         send_update(MQTTClient, ecu_name, delta_bytes, signature)
 
@@ -482,6 +482,7 @@ def prepare_payload(payload):
     print("decompressed bytes:  " + str(decompressed_bytes))
     with open("deltafile.hex","wb") as f:
         f.write(decompressed_bytes)
+    print(datetime.now().strftime("%H:%M:%S"))
     publish_status("done", "recieved payload successfully")
     return
 
@@ -552,7 +553,7 @@ def start_http_server():
 
 # === MAIN ===
 
-print("version 1.4.5")
+print("version 1.5.8")
 client.on_connect = on_connect
 client.on_message = on_message
 client.on_disconnect = on_disconnect
